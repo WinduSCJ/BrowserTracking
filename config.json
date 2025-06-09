@@ -18,9 +18,12 @@
         "server_url": "http://192.168.0.101:5000",
         "api_token": "BrowserTracker2024SecureToken",
         "check_interval": 300,
-        "batch_size": 100,
+        "batch_size": 50,
         "retry_attempts": 3,
-        "retry_delay": 60
+        "retry_delay": 60,
+        "timeout": 30,
+        "max_history_hours": 24,
+        "max_entries_per_profile": 200
     },
     "logging": {
         "level": "INFO",

