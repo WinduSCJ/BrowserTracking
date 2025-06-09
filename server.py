@@ -16,14 +16,17 @@ CORS(app)
 # Load configuration
 def load_config():
     try:
-        with open('config.json', 'r') as f:
+        # Check for environment variable config file
+        config_file = os.environ.get('CONFIG_FILE', 'config.json')
+
+        with open(config_file, 'r') as f:
             return json.load(f)
     except Exception as e:
         logger.error(f"Error loading config: {e}")
         return {
             "server": {"host": "0.0.0.0", "port": 5000},
-            "security": {"api_token": "default-token"},
-            "database": {"path": "browser_tracking.db"}
+            "security": {"api_token": "BrowserTracker2024SecureToken"},
+            "database": {"path": "/tmp/browser_tracking.db"}
         }
 
 config = load_config()

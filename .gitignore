@@ -64,3 +64,5 @@ tmp/
 # Backup files
 *.bak
 *.backup
+
+.vercel
