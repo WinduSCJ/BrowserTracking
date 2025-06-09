@@ -163,13 +163,56 @@
             background: #ef4444;
         }
         
-        .auto-refresh {
-            margin-left: 1rem;
+        .realtime-badge {
+            background: #10b981;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-right: 1rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+
+        .activity-table tr.new-entry {
+            background: #d4edda;
+            animation: highlight 3s ease-out;
+        }
+
+        @keyframes highlight {
+            0% { background: #10b981; color: white; }
+            100% { background: #d4edda; color: inherit; }
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
             font-size: 0.875rem;
         }
-        
-        .auto-refresh input {
-            margin-right: 0.5rem;
+
+        .connection-status.connected {
+            background: #10b981;
+        }
+
+        .connection-status.disconnected {
+            background: #ef4444;
+        }
+
+        .connection-status.connecting {
+            background: #f59e0b;
+            color: #333;
         }
     </style>
 </head>
@@ -205,10 +248,7 @@
             <div class="section-header">
                 <h2>Recent Browser Activity</h2>
                 <div>
-                    <label class="auto-refresh">
-                        <input type="checkbox" id="auto-refresh" checked>
-                        Auto Refresh (30s)
-                    </label>
+                    <span class="realtime-badge" id="realtime-status">⚡ REAL-TIME MODE</span>
                     <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
                 </div>
             </div>
@@ -237,47 +277,142 @@
         </div>
     </div>
 
+    <div class="connection-status connecting" id="connection-status">
+        🔄 Connecting...
+    </div>
+
     <script>
         const API_BASE = 'https://browser-tracking.vercel.app';
         const API_TOKEN = 'BrowserTracker2024SecureToken';
+
+        let eventSource = null;
+        let activityData = [];
+        let maxDisplayEntries = 50;
         
-        let autoRefreshInterval;
-        
+        // Initialize real-time connection
+        function initRealTimeConnection() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            updateConnectionStatus('connecting', '🔄 Connecting...');
+
+            eventSource = new EventSource(`${API_BASE}/api/events`);
+
+            eventSource.onopen = function() {
+                updateConnectionStatus('connected', '⚡ Real-time Connected');
+                console.log('Real-time connection established');
+            };
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleRealtimeMessage(data);
+                } catch (error) {
+                    console.error('Error parsing real-time message:', error);
+                }
+            };
+
+            eventSource.onerror = function(error) {
+                updateConnectionStatus('disconnected', '❌ Connection Lost');
+                console.error('Real-time connection error:', error);
+
+                // Retry connection after 5 seconds
+                setTimeout(() => {
+                    console.log('Retrying real-time connection...');
+                    initRealTimeConnection();
+                }, 5000);
+            };
+        }
+
+        function handleRealtimeMessage(data) {
+            switch (data.type) {
+                case 'connected':
+                    console.log('Real-time connection confirmed');
+                    loadInitialData();
+                    break;
+
+                case 'new_activity':
+                    console.log('New activity received:', data.data);
+                    addNewActivity(data.data);
+                    break;
+
+                case 'initial_data':
+                    updateStats();
+                    break;
+
+                case 'heartbeat':
+                    // Connection is alive
+                    break;
+
+                default:
+                    console.log('Unknown message type:', data.type);
+            }
+        }
+
+        function addNewActivity(newEntries) {
+            if (!Array.isArray(newEntries)) {
+                newEntries = [newEntries];
+            }
+
+            // Add new entries to the beginning of the array
+            activityData = [...newEntries, ...activityData];
+
+            // Limit the number of displayed entries
+            if (activityData.length > maxDisplayEntries) {
+                activityData = activityData.slice(0, maxDisplayEntries);
+            }
+
+            displayActivity();
+            updateStats();
+            updateLastUpdate();
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `connection-status ${status}`;
+            statusElement.textContent = message;
+        }
+
         async function checkServerStatus() {
             try {
                 const response = await fetch(`${API_BASE}/health`);
                 const data = await response.json();
-                
+
                 if (response.ok) {
-                    document.getElementById('server-status').innerHTML = 
+                    document.getElementById('server-status').innerHTML =
                         '<span class="status-indicator status-online"></span>Online';
                     return true;
                 } else {
                     throw new Error('Server error');
                 }
             } catch (error) {
-                document.getElementById('server-status').innerHTML = 
+                document.getElementById('server-status').innerHTML =
                     '<span class="status-indicator status-offline"></span>Offline';
                 return false;
             }
         }
         
         async function loadData() {
+            await loadInitialData();
+        }
+
+        async function loadInitialData() {
             const loading = document.getElementById('loading');
             const table = document.getElementById('activity-table');
             const errorDiv = document.getElementById('error-message');
-            
+
             loading.style.display = 'block';
             table.style.display = 'none';
             errorDiv.innerHTML = '';
-            
+
             try {
                 // Check server status
                 const serverOnline = await checkServerStatus();
                 if (!serverOnline) {
                     throw new Error('Server is offline');
                 }
-                
+
                 // Load activity data
                 const response = await fetch(`${API_BASE}/api/activity?hours=24&limit=50`, {
                     headers: {
@@ -285,20 +420,21 @@
                         'Content-Type': 'application/json'
                     }
                 });
-                
+
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
-                    displayActivity(data.activity);
-                    updateStats(data.activity);
+                    activityData = data.activity;
+                    displayActivity();
+                    updateStats();
                 } else {
                     throw new Error(data.error || 'Unknown error');
                 }
-                
+
             } catch (error) {
                 console.error('Error loading data:', error);
                 errorDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
@@ -307,74 +443,80 @@
             }
         }
         
-        function displayActivity(activities) {
+        function displayActivity() {
             const tbody = document.getElementById('activity-tbody');
             const table = document.getElementById('activity-table');
-            
+
             tbody.innerHTML = '';
-            
-            if (activities.length === 0) {
+
+            if (activityData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #6b7280;">No recent activity found</td></tr>';
             } else {
-                activities.forEach(activity => {
+                activityData.forEach((activity, index) => {
                     const row = document.createElement('tr');
-                    
+
+                    // Mark first 3 entries as new
+                    if (index < 3) {
+                        row.classList.add('new-entry');
+                    }
+
                     // Format time
-                    const time = new Date(activity.visit_time).toLocaleString();
-                    
+                    const time = new Date(activity.visit_time).toLocaleString('id-ID', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+
                     // Truncate URL and title
                     const url = activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url;
                     const title = activity.title && activity.title.length > 40 ? activity.title.substring(0, 40) + '...' : (activity.title || '-');
-                    
+
                     row.innerHTML = `
                         <td class="time-cell">${time}</td>
                         <td>${activity.hostname || '-'}</td>
                         <td>${activity.username || '-'}</td>
-                        <td class="url-cell" title="${activity.url}">${url}</td>
+                        <td class="url-cell" title="${activity.url}">
+                            <a href="${activity.url}" target="_blank">${url}</a>
+                        </td>
                         <td title="${activity.title || ''}">${title}</td>
                         <td>${activity.profile_name || '-'}</td>
                         <td>${activity.gmail_account || '-'}</td>
                     `;
-                    
+
                     tbody.appendChild(row);
                 });
             }
-            
+
             table.style.display = 'table';
         }
         
-        function updateStats(activities) {
-            document.getElementById('total-activities').textContent = activities.length;
-            
+        function updateStats() {
+            document.getElementById('total-activities').textContent = activityData.length;
+
             // Count unique hostnames
-            const uniqueHosts = new Set(activities.map(a => a.hostname)).size;
+            const uniqueHosts = new Set(activityData.map(a => a.hostname)).size;
             document.getElementById('active-clients').textContent = uniqueHosts;
-            
+
             // Update last update time
-            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            updateLastUpdate();
         }
-        
-        function setupAutoRefresh() {
-            const checkbox = document.getElementById('auto-refresh');
-            
-            function toggleAutoRefresh() {
-                if (checkbox.checked) {
-                    autoRefreshInterval = setInterval(loadData, 30000); // 30 seconds
-                } else {
-                    if (autoRefreshInterval) {
-                        clearInterval(autoRefreshInterval);
-                    }
-                }
-            }
-            
-            checkbox.addEventListener('change', toggleAutoRefresh);
-            toggleAutoRefresh(); // Start if checked
+
+        function updateLastUpdate() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('id-ID');
+            document.getElementById('last-update').textContent = timeStr;
         }
-        
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            loadData();
-            setupAutoRefresh();
+            initRealTimeConnection();
+            updateLastUpdate();
+
+            // Update last update time every second
+            setInterval(updateLastUpdate, 1000);
         });
     </script>
 </body>
