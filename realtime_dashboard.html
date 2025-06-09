@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 Real-time Browser Tracking Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .status-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+
+        .status-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .status-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online { background-color: #28a745; }
+        .status-offline { background-color: #dc3545; }
+        .status-realtime { background-color: #007bff; animation: pulse 2s infinite; }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .controls {
+            padding: 20px 30px;
+            background: #e9ecef;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #0056b3;
+        }
+
+        .btn.success {
+            background: #28a745;
+        }
+
+        .btn.success:hover {
+            background: #1e7e34;
+        }
+
+        .activity-section {
+            padding: 30px;
+        }
+
+        .activity-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .activity-header h2 {
+            color: #333;
+            font-size: 1.5em;
+        }
+
+        .realtime-badge {
+            background: #28a745;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            animation: pulse 2s infinite;
+        }
+
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .activity-table th {
+            background: #343a40;
+            color: white;
+            padding: 15px 10px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .activity-table td {
+            padding: 12px 10px;
+            border-bottom: 1px solid #dee2e6;
+            vertical-align: top;
+        }
+
+        .activity-table tr:hover {
+            background: #f8f9fa;
+        }
+
+        .activity-table tr.new-entry {
+            background: #d4edda;
+            animation: highlight 3s ease-out;
+        }
+
+        @keyframes highlight {
+            0% { background: #28a745; color: white; }
+            100% { background: #d4edda; color: inherit; }
+        }
+
+        .url-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .url-cell a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .url-cell a:hover {
+            text-decoration: underline;
+        }
+
+        .title-cell {
+            max-width: 250px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-weight: 500;
+        }
+
+        .time-cell {
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .profile-cell {
+            background: #e3f2fd;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #1976d2;
+        }
+
+        .gmail-cell {
+            background: #fff3e0;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            color: #f57c00;
+        }
+
+        .no-activity {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            font-style: italic;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .connection-status.connected {
+            background: #28a745;
+        }
+
+        .connection-status.disconnected {
+            background: #dc3545;
+        }
+
+        .connection-status.connecting {
+            background: #ffc107;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .status-bar {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .activity-table {
+                font-size: 0.8em;
+            }
+            
+            .activity-table th,
+            .activity-table td {
+                padding: 8px 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Real-time Browser Tracking Dashboard</h1>
+            <p>Live monitoring of browsing activity across all connected clients</p>
+        </div>
+
+        <div class="status-bar">
+            <div class="status-card">
+                <h3>Server Status</h3>
+                <div class="value" id="server-status">
+                    <span class="status-indicator status-offline"></span>Checking...
+                </div>
+            </div>
+            <div class="status-card">
+                <h3>Total Activities</h3>
+                <div class="value" id="total-activities">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Active Clients</h3>
+                <div class="value" id="active-clients">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Real-time Connections</h3>
+                <div class="value" id="realtime-connections">0</div>
+            </div>
+            <div class="status-card">
+                <h3>Last Update</h3>
+                <div class="value" id="last-update">--:--:--</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div>
+                <button class="btn" onclick="clearActivity()">🗑️ Clear Display</button>
+                <button class="btn" onclick="exportData()">📊 Export Data</button>
+            </div>
+            <div>
+                <span class="realtime-badge" id="realtime-status">⚡ REAL-TIME MODE</span>
+            </div>
+        </div>
+
+        <div class="activity-section">
+            <div class="activity-header">
+                <h2>Recent Browser Activity</h2>
+                <div id="activity-count">0 entries</div>
+            </div>
+            
+            <table class="activity-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Hostname</th>
+                        <th>User</th>
+                        <th>URL</th>
+                        <th>Title</th>
+                        <th>Profile</th>
+                        <th>Gmail</th>
+                    </tr>
+                </thead>
+                <tbody id="activity-tbody">
+                    <tr>
+                        <td colspan="7" class="no-activity">
+                            🔄 Connecting to real-time stream...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="connection-status connecting" id="connection-status">
+        🔄 Connecting...
+    </div>
+
+    <script>
+        const API_BASE = 'https://browser-tracking.vercel.app';
+        let eventSource = null;
+        let activityData = [];
+        let maxDisplayEntries = 100;
+
+        // Initialize real-time connection
+        function initRealTimeConnection() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            updateConnectionStatus('connecting', '🔄 Connecting...');
+            
+            eventSource = new EventSource(`${API_BASE}/api/events`);
+            
+            eventSource.onopen = function() {
+                updateConnectionStatus('connected', '⚡ Real-time Connected');
+                console.log('Real-time connection established');
+            };
+            
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleRealtimeMessage(data);
+                } catch (error) {
+                    console.error('Error parsing real-time message:', error);
+                }
+            };
+            
+            eventSource.onerror = function(error) {
+                updateConnectionStatus('disconnected', '❌ Connection Lost');
+                console.error('Real-time connection error:', error);
+                
+                // Retry connection after 5 seconds
+                setTimeout(() => {
+                    console.log('Retrying real-time connection...');
+                    initRealTimeConnection();
+                }, 5000);
+            };
+        }
+
+        function handleRealtimeMessage(data) {
+            switch (data.type) {
+                case 'connected':
+                    console.log('Real-time connection confirmed');
+                    loadInitialData();
+                    break;
+                    
+                case 'new_activity':
+                    console.log('New activity received:', data.data);
+                    addNewActivity(data.data);
+                    break;
+                    
+                case 'initial_data':
+                    updateStats();
+                    break;
+                    
+                case 'heartbeat':
+                    // Connection is alive
+                    break;
+                    
+                default:
+                    console.log('Unknown message type:', data.type);
+            }
+        }
+
+        function addNewActivity(newEntries) {
+            if (!Array.isArray(newEntries)) {
+                newEntries = [newEntries];
+            }
+
+            // Add new entries to the beginning of the array
+            activityData = [...newEntries, ...activityData];
+            
+            // Limit the number of displayed entries
+            if (activityData.length > maxDisplayEntries) {
+                activityData = activityData.slice(0, maxDisplayEntries);
+            }
+
+            displayActivity();
+            updateStats();
+            updateLastUpdate();
+        }
+
+        function displayActivity() {
+            const tbody = document.getElementById('activity-tbody');
+            
+            if (activityData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="no-activity">
+                            📭 No recent activity found
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = activityData.map((activity, index) => {
+                const isNew = index < 5; // Mark first 5 as new
+                const visitTime = new Date(activity.visit_time);
+                const timeStr = visitTime.toLocaleString('id-ID', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                return `
+                    <tr ${isNew ? 'class="new-entry"' : ''}>
+                        <td class="time-cell">${timeStr}</td>
+                        <td>${activity.hostname || 'Unknown'}</td>
+                        <td>${activity.username || 'Unknown'}</td>
+                        <td class="url-cell">
+                            <a href="${activity.url}" target="_blank" title="${activity.url}">
+                                ${activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url}
+                            </a>
+                        </td>
+                        <td class="title-cell" title="${activity.title}">
+                            ${activity.title.length > 40 ? activity.title.substring(0, 40) + '...' : activity.title}
+                        </td>
+                        <td>
+                            <span class="profile-cell">${activity.profile_name || 'Default'}</span>
+                        </td>
+                        <td>
+                            ${activity.gmail_account ? 
+                                `<span class="gmail-cell">${activity.gmail_account}</span>` : 
+                                '<span style="color: #999;">-</span>'
+                            }
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            // Update activity count
+            document.getElementById('activity-count').textContent = `${activityData.length} entries`;
+        }
+
+        async function loadInitialData() {
+            try {
+                const response = await fetch(`${API_BASE}/api/activity?hours=24&limit=50`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    activityData = data.activity;
+                    displayActivity();
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('Error loading initial data:', error);
+            }
+        }
+
+        async function updateStats() {
+            try {
+                const response = await fetch(`${API_BASE}/api/stats`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const stats = data.stats;
+                    document.getElementById('total-activities').textContent = stats.total_activities;
+                    document.getElementById('active-clients').textContent = stats.active_clients;
+                    document.getElementById('realtime-connections').textContent = stats.connected_sse_clients;
+                }
+            } catch (error) {
+                console.error('Error updating stats:', error);
+            }
+        }
+
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = `connection-status ${status}`;
+            statusElement.textContent = message;
+        }
+
+        function updateLastUpdate() {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('id-ID');
+            document.getElementById('last-update').textContent = timeStr;
+        }
+
+        function clearActivity() {
+            activityData = [];
+            displayActivity();
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(activityData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `browser_activity_${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initRealTimeConnection();
+            updateLastUpdate();
+            
+            // Update last update time every second
+            setInterval(updateLastUpdate, 1000);
+        });
+    </script>
+</body>
+</html>

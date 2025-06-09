@@ -220,3 +220,32 @@ class BrowserTrackingDB:
         except Exception as e:
             logger.error(f"Error getting recent activity: {e}")
             return []
+
+    def get_client_info(self, client_id):
+        """Get client information by ID"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT hostname, mac_address, local_ip, username, os_info
+                FROM clients
+                WHERE id = ?
+            ''', (client_id,))
+
+            result = cursor.fetchone()
+            conn.close()
+
+            if result:
+                return {
+                    'hostname': result[0],
+                    'mac_address': result[1],
+                    'local_ip': result[2],
+                    'username': result[3],
+                    'os_info': json.loads(result[4]) if result[4] else {}
+                }
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting client info: {e}")
+            return None

