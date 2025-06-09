@@ -16,10 +16,5 @@
     "PYTHONPATH": ".",
     "FLASK_ENV": "production",
     "VERCEL": "1"
-  },
-  "functions": {
-    "app.py": {
-      "maxDuration": 30
-    }
   }
 }
