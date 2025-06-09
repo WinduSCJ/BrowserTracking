@@ -2,7 +2,7 @@ import requests
 import json
 
 def test_connection():
-    server_url = "https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app"
+    server_url = "https://browser-tracking.vercel.app"
     api_token = "BrowserTracker2024SecureToken"
     
     headers = {

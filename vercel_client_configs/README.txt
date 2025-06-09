@@ -1,7 +1,7 @@
 # Browser Tracking Client Configuration (Vercel)
 
 ## Server Information
-- Server URL: https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app
+- Server URL: https://browser-tracking.vercel.app
 - API Token: BrowserTracker2024SecureToken
 - Deployment: Vercel Serverless
 
@@ -35,7 +35,7 @@ No manual configuration needed.
 ## Troubleshooting
 1. Ensure internet connectivity
 2. Check firewall settings (allow outbound HTTPS)
-3. Verify server URL is accessible: https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app/health
+3. Verify server URL is accessible: https://browser-tracking.vercel.app/health
 4. Check API token matches server configuration
 
 ## Support
