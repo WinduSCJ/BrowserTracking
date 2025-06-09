@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browser Tracking Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: #2563eb;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+        
+        .activity-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .section-header {
+            background: #f9fafb;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+        }
+        
+        .section-header h2 {
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+        
+        .refresh-btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        
+        .refresh-btn:hover {
+            background: #1d4ed8;
+        }
+        
+        .activity-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .activity-table th,
+        .activity-table td {
+            padding: 0.75rem 1.5rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .activity-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #374151;
+        }
+        
+        .activity-table td {
+            font-size: 0.875rem;
+        }
+        
+        .url-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .time-cell {
+            color: #6b7280;
+            font-size: 0.8rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
+        
+        .error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.5rem;
+        }
+        
+        .status-online {
+            background: #10b981;
+        }
+        
+        .status-offline {
+            background: #ef4444;
+        }
+        
+        .auto-refresh {
+            margin-left: 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .auto-refresh input {
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 Browser Tracking Dashboard</h1>
+    </div>
+    
+    <div class="container">
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Server Status</h3>
+                <div class="value" id="server-status">
+                    <span class="status-indicator status-offline"></span>
+                    Checking...
+                </div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Activities</h3>
+                <div class="value" id="total-activities">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Clients</h3>
+                <div class="value" id="active-clients">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Last Update</h3>
+                <div class="value" id="last-update" style="font-size: 1rem;">-</div>
+            </div>
+        </div>
+        
+        <div class="activity-section">
+            <div class="section-header">
+                <h2>Recent Browser Activity</h2>
+                <div>
+                    <label class="auto-refresh">
+                        <input type="checkbox" id="auto-refresh" checked>
+                        Auto Refresh (30s)
+                    </label>
+                    <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
+                </div>
+            </div>
+            
+            <div id="error-message"></div>
+            
+            <div id="loading" class="loading">
+                Loading data...
+            </div>
+            
+            <table class="activity-table" id="activity-table" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Hostname</th>
+                        <th>User</th>
+                        <th>URL</th>
+                        <th>Title</th>
+                        <th>Profile</th>
+                        <th>Gmail</th>
+                    </tr>
+                </thead>
+                <tbody id="activity-tbody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://browser-tracking.vercel.app';
+        const API_TOKEN = 'BrowserTracker2024SecureToken';
+        
+        let autoRefreshInterval;
+        
+        async function checkServerStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById('server-status').innerHTML = 
+                        '<span class="status-indicator status-online"></span>Online';
+                    return true;
+                } else {
+                    throw new Error('Server error');
+                }
+            } catch (error) {
+                document.getElementById('server-status').innerHTML = 
+                    '<span class="status-indicator status-offline"></span>Offline';
+                return false;
+            }
+        }
+        
+        async function loadData() {
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('activity-table');
+            const errorDiv = document.getElementById('error-message');
+            
+            loading.style.display = 'block';
+            table.style.display = 'none';
+            errorDiv.innerHTML = '';
+            
+            try {
+                // Check server status
+                const serverOnline = await checkServerStatus();
+                if (!serverOnline) {
+                    throw new Error('Server is offline');
+                }
+                
+                // Load activity data
+                const response = await fetch(`${API_BASE}/api/activity?hours=24&limit=50`, {
+                    headers: {
+                        'Authorization': `Bearer ${API_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayActivity(data.activity);
+                    updateStats(data.activity);
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+                
+            } catch (error) {
+                console.error('Error loading data:', error);
+                errorDiv.innerHTML = `<div class="error">Error: ${error.message}</div>`;
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+        
+        function displayActivity(activities) {
+            const tbody = document.getElementById('activity-tbody');
+            const table = document.getElementById('activity-table');
+            
+            tbody.innerHTML = '';
+            
+            if (activities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #6b7280;">No recent activity found</td></tr>';
+            } else {
+                activities.forEach(activity => {
+                    const row = document.createElement('tr');
+                    
+                    // Format time
+                    const time = new Date(activity.visit_time).toLocaleString();
+                    
+                    // Truncate URL and title
+                    const url = activity.url.length > 50 ? activity.url.substring(0, 50) + '...' : activity.url;
+                    const title = activity.title && activity.title.length > 40 ? activity.title.substring(0, 40) + '...' : (activity.title || '-');
+                    
+                    row.innerHTML = `
+                        <td class="time-cell">${time}</td>
+                        <td>${activity.hostname || '-'}</td>
+                        <td>${activity.username || '-'}</td>
+                        <td class="url-cell" title="${activity.url}">${url}</td>
+                        <td title="${activity.title || ''}">${title}</td>
+                        <td>${activity.profile_name || '-'}</td>
+                        <td>${activity.gmail_account || '-'}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+            }
+            
+            table.style.display = 'table';
+        }
+        
+        function updateStats(activities) {
+            document.getElementById('total-activities').textContent = activities.length;
+            
+            // Count unique hostnames
+            const uniqueHosts = new Set(activities.map(a => a.hostname)).size;
+            document.getElementById('active-clients').textContent = uniqueHosts;
+            
+            // Update last update time
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+        }
+        
+        function setupAutoRefresh() {
+            const checkbox = document.getElementById('auto-refresh');
+            
+            function toggleAutoRefresh() {
+                if (checkbox.checked) {
+                    autoRefreshInterval = setInterval(loadData, 30000); // 30 seconds
+                } else {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                    }
+                }
+            }
+            
+            checkbox.addEventListener('change', toggleAutoRefresh);
+            toggleAutoRefresh(); // Start if checked
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            setupAutoRefresh();
+        });
+    </script>
+</body>
+</html>

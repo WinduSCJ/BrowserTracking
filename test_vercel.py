@@ -4,7 +4,7 @@ import json
 def test_vercel_deployment():
     """Test Vercel deployment"""
     
-    base_url = "https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app"
+    base_url = "https://browser-tracking-35gbefxm5-winduajis-projects.vercel.app"
     api_token = "BrowserTracker2024SecureToken"
     
     headers = {

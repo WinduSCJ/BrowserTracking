@@ -188,6 +188,22 @@ def authenticate():
     if not verify_token(api_token):
         return jsonify({'error': 'Invalid API token'}), 401
 
+@app.route('/', methods=['GET'])
+def dashboard():
+    """Dashboard UI"""
+    try:
+        with open('dashboard.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except:
+        return """
+        <h1>Browser Tracking Dashboard</h1>
+        <p>Dashboard not available. Use API endpoints:</p>
+        <ul>
+            <li><a href="/health">/health</a> - Health check</li>
+            <li>/api/activity - Recent activity (requires auth)</li>
+        </ul>
+        """
+
 @app.route('/health', methods=['GET'])
 def health():
     """Health check endpoint"""
