@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  browser-tracking-server:
+    build: .
+    container_name: browser-tracking-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - browser_tracking_data:/var/lib/browser-tracking
+      - browser_tracking_logs:/var/log/browser-tracking
+      - browser_tracking_backups:/var/backups/browser-tracking
+      - ./ssl:/etc/ssl/certs:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - browser_tracking_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: browser-tracking-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/ssl/certs:ro
+    depends_on:
+      - browser-tracking-server
+    networks:
+      - browser_tracking_network
+
+volumes:
+  browser_tracking_data:
+    driver: local
+  browser_tracking_logs:
+    driver: local
+  browser_tracking_backups:
+    driver: local
+
+networks:
+  browser_tracking_network:
+    driver: bridge

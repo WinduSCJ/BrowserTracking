@@ -1,0 +1,32 @@
+{
+    "server": {
+        "host": "0.0.0.0",
+        "port": 5000,
+        "debug": false,
+        "ssl_enabled": false,
+        "ssl_cert": "",
+        "ssl_key": ""
+    },
+    "database": {
+        "path": "browser_tracking.db"
+    },
+    "security": {
+        "api_token": "GWcuPABCAitXmqdKX5eJu8tQAW5zzMAfswGc-Ik9IfU",
+        "encryption_key": "client-encryption-key"
+    },
+    "client": {
+        "server_url": "https://your-ngrok-url.ngrok.io:5000",
+        "api_token": "GWcuPABCAitXmqdKX5eJu8tQAW5zzMAfswGc-Ik9IfU",
+        "check_interval": 300,
+        "batch_size": 100,
+        "retry_attempts": 5,
+        "retry_delay": 60,
+        "timeout": 30
+    },
+    "logging": {
+        "level": "INFO",
+        "max_file_size": "50KB",
+        "max_files": 5,
+        "log_file": "browser_tracking.log"
+    }
+}

@@ -1,0 +1,42 @@
+{
+    "server": {
+        "host": "0.0.0.0",
+        "port": 5000,
+        "debug": false,
+        "ssl_enabled": true,
+        "ssl_cert": "/etc/ssl/certs/monitoring.yourisp.com.pem",
+        "ssl_key": "/etc/ssl/private/monitoring.yourisp.com.key"
+    },
+    "database": {
+        "path": "/var/lib/browser-tracking/browser_tracking.db"
+    },
+    "security": {
+        "api_token": "GWcuPABCAitXmqdKX5eJu8tQAW5zzMAfswGc-Ik9IfU",
+        "encryption_key": "your-encryption-key-here",
+        "allowed_origins": ["*"],
+        "rate_limit": {
+            "enabled": true,
+            "requests_per_minute": 100
+        }
+    },
+    "client": {
+        "server_url": "https://monitoring.yourisp.com:5000",
+        "api_token": "GWcuPABCAitXmqdKX5eJu8tQAW5zzMAfswGc-Ik9IfU",
+        "check_interval": 300,
+        "batch_size": 100,
+        "retry_attempts": 5,
+        "retry_delay": 60,
+        "timeout": 30
+    },
+    "logging": {
+        "level": "INFO",
+        "max_file_size": "10MB",
+        "max_files": 10,
+        "log_file": "/var/log/browser-tracking/browser_tracking.log"
+    },
+    "monitoring": {
+        "health_check_interval": 60,
+        "backup_interval": 3600,
+        "backup_path": "/var/backups/browser-tracking/"
+    }
+}

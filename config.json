@@ -1,0 +1,31 @@
+{
+    "server": {
+        "host": "0.0.0.0",
+        "port": 5000,
+        "debug": false,
+        "ssl_enabled": false,
+        "ssl_cert": "",
+        "ssl_key": ""
+    },
+    "database": {
+        "path": "browser_tracking.db"
+    },
+    "security": {
+        "api_token": "BrowserTracker2024SecureToken",
+        "encryption_key": "your-encryption-key-here"
+    },
+    "client": {
+        "server_url": "http://192.168.0.101:5000",
+        "api_token": "BrowserTracker2024SecureToken",
+        "check_interval": 300,
+        "batch_size": 100,
+        "retry_attempts": 3,
+        "retry_delay": 60
+    },
+    "logging": {
+        "level": "INFO",
+        "max_file_size": "50KB",
+        "max_files": 5,
+        "log_file": "browser_tracking.log"
+    }
+}
