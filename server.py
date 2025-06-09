@@ -110,6 +110,24 @@ def health():
         'version': '1.0.0'
     })
 
+@app.route('/')
+def dashboard():
+    """Serve main dashboard"""
+    try:
+        with open('dashboard.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({'error': 'Dashboard not found'}), 404
+
+@app.route('/realtime')
+def realtime_dashboard():
+    """Serve real-time dashboard"""
+    try:
+        with open('realtime_dashboard.html', 'r', encoding='utf-8') as f:
+            return f.read()
+    except FileNotFoundError:
+        return jsonify({'error': 'Real-time dashboard not found'}), 404
+
 @app.route('/api/register', methods=['POST'])
 def register_client():
     """Register a new client"""
