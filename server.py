@@ -59,6 +59,7 @@ class RealtimeNotifier:
     def notify_new_activity(self, activity_data):
         """Notify all connected clients of new activity"""
         if not self.clients:
+            logger.info("No SSE clients connected - skipping notification")
             return
 
         message = json.dumps({
@@ -67,19 +68,23 @@ class RealtimeNotifier:
             'timestamp': datetime.now().isoformat()
         })
 
+        logger.info(f"Sending SSE notification to {len(self.clients)} clients")
+
         # Send to all connected clients
         disconnected_clients = []
         for client in self.clients:
             try:
                 client.put(f"data: {message}\n\n")
-            except:
+                logger.debug(f"SSE message sent to client")
+            except Exception as e:
+                logger.error(f"Failed to send SSE message to client: {e}")
                 disconnected_clients.append(client)
 
         # Remove disconnected clients
         for client in disconnected_clients:
             self.remove_client(client)
 
-        logger.info(f"Notified {len(self.clients)} clients of new activity")
+        logger.info(f"Successfully notified {len(self.clients) - len(disconnected_clients)} clients")
 
 notifier = RealtimeNotifier()
 

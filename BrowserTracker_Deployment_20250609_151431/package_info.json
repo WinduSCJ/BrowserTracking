@@ -1,0 +1,13 @@
+{
+  "name": "Browser Tracking Agent",
+  "version": "1.0",
+  "created": "2025-06-09T15:14:31.696956",
+  "files_included": 11,
+  "server_url": "https://browser-tracking.vercel.app",
+  "requirements": {
+    "python": "3.11+",
+    "os": "Windows 10/11",
+    "memory": "50MB",
+    "disk": "100MB"
+  }
+}

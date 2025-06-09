@@ -1,6 +1,6 @@
 {
-  "status": "stopped",
-  "timestamp": "2025-06-09T13:31:22.551789",
-  "client_id": 1,
-  "pid": 13168
+  "status": "running",
+  "timestamp": "2025-06-09T15:23:57.741502",
+  "client_id": null,
+  "pid": 17956
 }

@@ -259,7 +259,7 @@
             <div class="section-header">
                 <h2>Recent Browser Activity</h2>
                 <div>
-                    <span class="realtime-badge" id="realtime-status">⚡ REAL-TIME MODE</span>
+                    <span class="realtime-badge" id="realtime-status">⚡ SMART AUTO-REFRESH</span>
                     <button class="refresh-btn" onclick="loadData()">🔄 Refresh</button>
                 </div>
             </div>
@@ -300,108 +300,25 @@
         let activityData = [];
         let maxDisplayEntries = 50;
         
-        // Initialize real-time connection with fast polling fallback
+        // Initialize smart polling system
         function initRealTimeConnection() {
-            updateConnectionStatus('connecting', '🔄 Connecting...');
-
-            // Try SSE first
-            if (typeof EventSource !== 'undefined') {
-                console.log('Attempting SSE connection...');
-                trySSEConnection();
-            } else {
-                console.log('SSE not supported, using fast polling...');
-                startFastPolling();
-            }
+            updateConnectionStatus('connecting', '🔄 Initializing...');
+            console.log('Starting smart polling system...');
+            startSmartPolling();
         }
 
-        function trySSEConnection() {
-            if (eventSource) {
-                eventSource.close();
-            }
-
-            connectionType = 'sse';
-            updateConnectionStatus('connecting', '🔄 Connecting SSE', 'Attempting real-time connection');
-
-            eventSource = new EventSource(`${API_BASE}/api/events`);
-
-            let sseConnected = false;
-            let connectionTimeout;
-
-            eventSource.onopen = function() {
-                sseConnected = true;
-                clearTimeout(connectionTimeout);
-                updateConnectionStatus('connected', '⚡ Real-time Active', 'SSE connection established');
-                console.log('SSE connection established');
-            };
-
-            eventSource.onmessage = function(event) {
-                try {
-                    const data = JSON.parse(event.data);
-                    handleRealtimeMessage(data);
-                    consecutiveErrors = 0; // Reset error count on successful message
-                } catch (error) {
-                    console.error('Error parsing SSE message:', error);
-                    consecutiveErrors++;
-                }
-            };
-
-            eventSource.onerror = function(error) {
-                console.error('SSE connection error:', error);
-                consecutiveErrors++;
-
-                if (!sseConnected) {
-                    console.log('SSE failed to connect, falling back to fast polling...');
-                    updateConnectionStatus('connecting', '🔄 SSE Failed', 'Switching to fast polling');
-                    eventSource.close();
-                    setTimeout(() => startFastPolling(), 1000);
-                } else {
-                    const details = getDetailedConnectionStatus();
-                    updateConnectionStatus('disconnected', '❌ SSE Lost', details);
-
-                    // Retry SSE after delay based on error count
-                    const retryDelay = Math.min(5000 + (consecutiveErrors * 2000), 30000);
-                    setTimeout(() => {
-                        if (isOnline) {
-                            console.log(`Retrying SSE connection... (attempt ${consecutiveErrors})`);
-                            trySSEConnection();
-                        } else {
-                            updateConnectionStatus('disconnected', '❌ No Internet', 'Check your connection');
-                        }
-                    }, retryDelay);
-                }
-            };
-
-            // Timeout for SSE connection
-            connectionTimeout = setTimeout(() => {
-                if (!sseConnected) {
-                    console.log('SSE connection timeout, falling back to fast polling...');
-                    eventSource.close();
-                    updateConnectionStatus('connecting', '🔄 SSE Timeout', 'Switching to polling');
-                    setTimeout(() => startFastPolling(), 1000);
-                }
-            }, 15000);
-        }
-
-        let pollingInterval = null;
-        let lastActivityCount = 0;
-        let isPolling = false;
-        let connectionType = 'none';
-        let lastSuccessfulConnection = null;
-        let consecutiveErrors = 0;
-        let isOnline = navigator.onLine;
-
-        function startFastPolling() {
+        function startSmartPolling() {
             if (isPolling) return;
 
             isPolling = true;
-            connectionType = 'polling';
-            updateConnectionStatus('connected', '⚡ Fast Polling Active', '3-second intervals');
-            console.log('Starting fast polling (3-second intervals)...');
+            connectionType = 'smart_polling';
+            updateConnectionStatus('connected', '⚡ Smart Polling Active', 'Auto-refresh every 5s');
+            console.log('Starting smart polling system...');
 
             // Initial load
             loadInitialData();
 
-            // Poll every 3 seconds
+            // Smart polling with adaptive intervals
             pollingInterval = setInterval(async () => {
                 try {
                     if (!isOnline) {
@@ -409,16 +326,28 @@
                         return;
                     }
 
-                    await checkForNewActivity();
+                    await checkForNewActivitySmart();
                 } catch (error) {
-                    console.error('Polling error:', error);
+                    console.error('Smart polling error:', error);
                     consecutiveErrors++;
 
                     const details = getDetailedConnectionStatus();
                     updateConnectionStatus('disconnected', '❌ Polling Failed', details);
                 }
-            }, 3000);
+            }, smartPollingInterval);
         }
+
+        let pollingInterval = null;
+        let lastActivityCount = 0;
+        let isPolling = false;
+        let connectionType = 'smart_polling';
+        let lastSuccessfulConnection = null;
+        let consecutiveErrors = 0;
+        let isOnline = navigator.onLine;
+        let lastActivityHash = '';
+        let smartPollingInterval = 5000; // Start with 5 seconds
+
+        // Removed old fast polling - using smart polling instead
 
         function stopPolling() {
             if (pollingInterval) {
@@ -428,14 +357,13 @@
             isPolling = false;
         }
 
-        async function checkForNewActivity() {
+        async function checkForNewActivitySmart() {
             try {
-                const response = await fetch(`${API_BASE}/api/activity?hours=1&limit=10`, {
+                const response = await fetch(`${API_BASE}/api/activity?hours=1&limit=20`, {
                     headers: {
                         'Authorization': `Bearer ${API_TOKEN}`,
                         'Content-Type': 'application/json'
-                    },
-                    timeout: 10000
+                    }
                 });
 
                 if (response.ok) {
@@ -444,29 +372,51 @@
                         // Reset error count on successful response
                         consecutiveErrors = 0;
 
-                        const currentCount = data.activity.length;
+                        const activities = data.activity;
+                        const currentCount = activities.length;
 
-                        // Update connection status to show successful polling
-                        if (connectionType === 'polling') {
-                            updateConnectionStatus('connected', '⚡ Polling Active', `${currentCount} activities`);
-                        }
+                        // Create hash of latest activity for change detection
+                        const currentHash = activities.length > 0 ?
+                            JSON.stringify(activities.slice(0, 3).map(a => a.url + a.visit_time)) : '';
 
-                        // Check if there's new activity
-                        if (currentCount > lastActivityCount) {
-                            console.log(`New activity detected! ${currentCount} vs ${lastActivityCount}`);
+                        // Check if there's actually new content (not just count)
+                        if (currentHash !== lastActivityHash) {
+                            console.log('New activity content detected!');
 
-                            // Get the new entries (difference)
-                            const newEntries = data.activity.slice(0, currentCount - lastActivityCount);
-                            addNewActivity(newEntries);
+                            // Update data
+                            activityData = activities;
+                            displayActivity();
+                            updateStats();
 
+                            // Update tracking variables
                             lastActivityCount = currentCount;
+                            lastActivityHash = currentHash;
+
+                            // Speed up polling temporarily when activity is detected
+                            smartPollingInterval = 3000; // 3 seconds
+                            updateConnectionStatus('connected', '⚡ Active Monitoring', `${currentCount} activities - Fast mode`);
+
+                            // Reset polling interval after 30 seconds
+                            setTimeout(() => {
+                                smartPollingInterval = 5000; // Back to 5 seconds
+                                updateConnectionStatus('connected', '⚡ Smart Polling Active', `${currentCount} activities`);
+                            }, 30000);
+
                         } else if (lastActivityCount === 0) {
                             // First load
-                            activityData = data.activity;
+                            activityData = activities;
                             displayActivity();
                             updateStats();
                             lastActivityCount = currentCount;
+                            lastActivityHash = currentHash;
+                        } else {
+                            // No new activity, slow down polling slightly
+                            smartPollingInterval = Math.min(smartPollingInterval + 1000, 10000); // Max 10 seconds
                         }
+
+                        // Update connection status
+                        updateConnectionStatus('connected', '⚡ Smart Polling Active', `${currentCount} activities`);
+
                     } else {
                         throw new Error(data.error || 'API returned error');
                     }
@@ -474,7 +424,7 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
             } catch (error) {
-                console.error('Error checking for new activity:', error);
+                console.error('Error in smart polling:', error);
                 consecutiveErrors++;
 
                 // Determine error type
@@ -493,48 +443,9 @@
             }
         }
 
-        function handleRealtimeMessage(data) {
-            switch (data.type) {
-                case 'connected':
-                    console.log('Real-time connection confirmed');
-                    loadInitialData();
-                    break;
+        // Removed SSE message handling - using direct polling instead
 
-                case 'new_activity':
-                    console.log('New activity received:', data.data);
-                    addNewActivity(data.data);
-                    break;
-
-                case 'initial_data':
-                    updateStats();
-                    break;
-
-                case 'heartbeat':
-                    // Connection is alive
-                    break;
-
-                default:
-                    console.log('Unknown message type:', data.type);
-            }
-        }
-
-        function addNewActivity(newEntries) {
-            if (!Array.isArray(newEntries)) {
-                newEntries = [newEntries];
-            }
-
-            // Add new entries to the beginning of the array
-            activityData = [...newEntries, ...activityData];
-
-            // Limit the number of displayed entries
-            if (activityData.length > maxDisplayEntries) {
-                activityData = activityData.slice(0, maxDisplayEntries);
-            }
-
-            displayActivity();
-            updateStats();
-            updateLastUpdate();
-        }
+        // Simplified - activity updates handled directly in smart polling
 
         function updateConnectionStatus(status, message, details = '') {
             const statusElement = document.getElementById('connection-status');
@@ -785,12 +696,12 @@
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Dashboard initializing...');
+            console.log('Dashboard initializing with smart polling...');
 
             // Setup network monitoring
             setupNetworkMonitoring();
 
-            // Initialize connection
+            // Initialize smart polling
             initRealTimeConnection();
             updateLastUpdate();
 
@@ -799,9 +710,6 @@
 
             // Cleanup on page unload
             window.addEventListener('beforeunload', function() {
-                if (eventSource) {
-                    eventSource.close();
-                }
                 stopPolling();
             });
         });

@@ -1,0 +1,122 @@
+========================================
+Browser Tracking Agent - Manual Install
+========================================
+
+If the automatic installer fails, follow these manual steps:
+
+STEP 1: Check Python Installation
+---------------------------------
+1. Open Command Prompt (cmd)
+2. Type: python --version
+3. If Python is installed, you'll see version number
+4. If not installed, download from: https://www.python.org/downloads/
+   - Choose Python 3.11 or newer
+   - During installation, CHECK "Add Python to PATH"
+
+STEP 2: Extract Files
+--------------------
+1. Extract the ZIP file to a folder (e.g., C:\BrowserTracker)
+2. Open Command Prompt as Administrator
+3. Navigate to the extracted folder:
+   cd C:\BrowserTracker
+
+STEP 3: Install Dependencies
+---------------------------
+1. In Command Prompt, run:
+   pip install requests
+
+STEP 4: Copy Agent Files
+-----------------------
+1. Create installation directory:
+   mkdir "C:\Program Files\BrowserTracker"
+
+2. Copy agent files:
+   copy agent_files\*.* "C:\Program Files\BrowserTracker\"
+
+STEP 5: Test Installation
+------------------------
+1. Navigate to installation directory:
+   cd "C:\Program Files\BrowserTracker"
+
+2. Test the agent:
+   python enhanced_agent.py --test
+
+3. If successful, you should see "Server connection: OK"
+
+STEP 6: Setup Auto-Start
+-----------------------
+1. Open Registry Editor (regedit) as Administrator
+2. Navigate to: HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+3. Create new String Value:
+   - Name: BrowserTracker
+   - Value: "python" "C:\Program Files\BrowserTracker\enhanced_agent.py" --start
+
+STEP 7: Start Agent
+------------------
+1. Start agent manually:
+   python enhanced_agent.py --start
+
+2. Check if running:
+   python enhanced_agent.py --status
+
+3. Verify in dashboard: https://browser-tracking.vercel.app
+
+TROUBLESHOOTING
+==============
+
+Problem: "python is not recognized"
+Solution: 
+- Reinstall Python with "Add to PATH" checked
+- OR use full path: C:\Python311\python.exe
+
+Problem: "No module named 'requests'"
+Solution:
+- Run: pip install requests
+- OR: python -m pip install requests
+
+Problem: "Permission denied"
+Solution:
+- Run Command Prompt as Administrator
+- Check antivirus settings
+
+Problem: "Agent not starting"
+Solution:
+- Check Windows Firewall settings
+- Verify internet connection
+- Run: python enhanced_agent.py --test
+
+Problem: "No data in dashboard"
+Solution:
+- Wait 5-10 minutes for first data
+- Check Chrome is installed and used
+- Verify agent status: python enhanced_agent.py --status
+
+VERIFICATION
+===========
+
+1. Check Task Manager for python.exe process
+2. Check dashboard: https://browser-tracking.vercel.app
+3. Your computer should appear in client list
+4. Browse some websites in Chrome
+5. Wait 5 minutes and refresh dashboard
+
+UNINSTALL
+=========
+
+1. Stop agent: python enhanced_agent.py --stop
+2. Remove registry entry (regedit)
+3. Delete installation folder
+4. Uninstall Python (if not needed)
+
+SUPPORT
+=======
+
+If you need help:
+1. Check the log files in installation directory
+2. Run diagnostic: python enhanced_agent.py --test
+3. Contact system administrator
+
+========================================
+Installation complete! Agent will now monitor
+browser activity and send data to dashboard.
+========================================

