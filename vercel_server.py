@@ -177,32 +177,61 @@ def verify_token(token):
 @app.before_request
 def authenticate():
     """Authenticate requests"""
-    if request.endpoint in ['health']:
-        return  # Skip auth for health check
-    
-    token = request.headers.get('Authorization')
-    if not token or not token.startswith('Bearer '):
-        return jsonify({'error': 'Missing or invalid authorization header'}), 401
-    
-    api_token = token.replace('Bearer ', '')
-    if not verify_token(api_token):
-        return jsonify({'error': 'Invalid API token'}), 401
+    # Skip auth for public endpoints
+    public_endpoints = ['health', 'dashboard']
+    if request.endpoint in public_endpoints:
+        return
+
+    # Skip auth for root path (dashboard)
+    if request.path == '/':
+        return
+
+    # Require auth for API endpoints
+    if request.path.startswith('/api/'):
+        token = request.headers.get('Authorization')
+        if not token or not token.startswith('Bearer '):
+            return jsonify({'error': 'Missing or invalid authorization header'}), 401
+
+        api_token = token.replace('Bearer ', '')
+        if not verify_token(api_token):
+            return jsonify({'error': 'Invalid API token'}), 401
 
 @app.route('/', methods=['GET'])
 def dashboard():
     """Dashboard UI"""
     try:
         with open('dashboard.html', 'r', encoding='utf-8') as f:
-            return f.read()
-    except:
-        return """
-        <h1>Browser Tracking Dashboard</h1>
-        <p>Dashboard not available. Use API endpoints:</p>
-        <ul>
-            <li><a href="/health">/health</a> - Health check</li>
-            <li>/api/activity - Recent activity (requires auth)</li>
-        </ul>
-        """
+            html_content = f.read()
+            response = app.response_class(
+                response=html_content,
+                status=200,
+                mimetype='text/html'
+            )
+            return response
+    except Exception as e:
+        print(f"Error loading dashboard: {e}")
+        html_content = """
+        <!DOCTYPE html>
+        <html>
+        <head><title>Browser Tracking Dashboard</title></head>
+        <body>
+            <h1>Browser Tracking Dashboard</h1>
+            <p>Dashboard not available. Use API endpoints:</p>
+            <ul>
+                <li><a href="/health">/health</a> - Health check</li>
+                <li><a href="/api/activity">/api/activity</a> - Recent activity (requires auth)</li>
+            </ul>
+            <p>Error: {}</p>
+        </body>
+        </html>
+        """.format(str(e))
+
+        response = app.response_class(
+            response=html_content,
+            status=200,
+            mimetype='text/html'
+        )
+        return response
 
 @app.route('/health', methods=['GET'])
 def health():
