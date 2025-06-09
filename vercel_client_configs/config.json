@@ -8,11 +8,11 @@
         "ssl_key": ""
     },
     "database": {
-        "path": "/tmp/browser_tracking.db"
+        "path": "browser_tracking.db"
     },
     "security": {
         "api_token": "BrowserTracker2024SecureToken",
-        "encryption_key": "vercel-encryption-key"
+        "encryption_key": "client-encryption-key"
     },
     "client": {
         "server_url": "https://browser-tracking-28tr6vyd7-winduajis-projects.vercel.app",
@@ -27,6 +27,6 @@
         "level": "INFO",
         "max_file_size": "50KB",
         "max_files": 5,
-        "log_file": "/tmp/browser_tracking.log"
+        "log_file": "browser_tracking.log"
     }
 }
