@@ -5,10 +5,14 @@ from logging.handlers import RotatingFileHandler
 
 def setup_logger(name, config_path="config.json"):
     """Setup logger with rotating file handler"""
-    
+
+    # Check if running in Vercel (serverless environment)
+    is_vercel = os.environ.get('VERCEL') == '1' or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+
     # Load config
     try:
-        with open(config_path, 'r') as f:
+        config_file = os.environ.get('CONFIG_FILE', config_path)
+        with open(config_file, 'r') as f:
             config = json.load(f)
         log_config = config.get('logging', {})
     except:
@@ -16,7 +20,7 @@ def setup_logger(name, config_path="config.json"):
             "level": "INFO",
             "max_file_size": "100KB",
             "max_files": 10,
-            "log_file": "browser_tracking.log"
+            "log_file": "/tmp/browser_tracking.log" if is_vercel else "browser_tracking.log"
         }
     
     # Parse max file size
@@ -41,17 +45,22 @@ def setup_logger(name, config_path="config.json"):
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
     
-    # File handler with rotation
-    log_file = log_config.get('log_file', 'browser_tracking.log')
-    max_files = log_config.get('max_files', 10)
-    
-    file_handler = RotatingFileHandler(
-        log_file, 
-        maxBytes=max_size, 
-        backupCount=max_files
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    # File handler with rotation (only if not in serverless environment)
+    if not is_vercel:
+        log_file = log_config.get('log_file', 'browser_tracking.log')
+        max_files = log_config.get('max_files', 10)
+
+        try:
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=max_size,
+                backupCount=max_files
+            )
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+        except (OSError, PermissionError):
+            # Fallback to console only if file logging fails
+            pass
     
     # Console handler for debugging
     console_handler = logging.StreamHandler()

@@ -30,7 +30,14 @@ def load_config():
         }
 
 config = load_config()
-db = BrowserTrackingDB(config['database']['path'])
+
+# Initialize database with proper path for environment
+db_path = config['database']['path']
+is_vercel = os.environ.get('VERCEL') == '1' or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+if is_vercel and not db_path.startswith('/tmp'):
+    db_path = '/tmp/browser_tracking.db'
+
+db = BrowserTrackingDB(db_path)
 
 def verify_token(token):
     """Verify API token"""

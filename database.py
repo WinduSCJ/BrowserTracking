@@ -1,12 +1,21 @@
 import sqlite3
 import json
+import os
 from datetime import datetime
 from logger import setup_logger
 
 logger = setup_logger(__name__)
 
 class BrowserTrackingDB:
-    def __init__(self, db_path="browser_tracking.db"):
+    def __init__(self, db_path=None):
+        # Use /tmp for serverless environments
+        if db_path is None:
+            is_vercel = os.environ.get('VERCEL') == '1' or os.environ.get('AWS_LAMBDA_FUNCTION_NAME')
+            if is_vercel:
+                db_path = "/tmp/browser_tracking.db"
+            else:
+                db_path = "browser_tracking.db"
+
         self.db_path = db_path
         self.init_database()
     

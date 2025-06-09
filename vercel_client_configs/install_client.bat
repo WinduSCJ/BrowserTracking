@@ -1,6 +1,6 @@
 @echo off
 echo Browser Tracking Client Installer (Vercel Server)
-echo Server: https://browser-tracking-28tr6vyd7-winduajis-projects.vercel.app
+echo Server: https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app
 echo.
 
 REM Check admin privileges
@@ -16,11 +16,11 @@ if %errorLevel% == 0 (
 
 REM Test server connectivity
 echo Testing server connectivity...
-curl -f https://browser-tracking-28tr6vyd7-winduajis-projects.vercel.app/health
+curl -f https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app/health
 if %errorLevel% == 0 (
     echo Server is reachable
 ) else (
-    echo Cannot reach server at https://browser-tracking-28tr6vyd7-winduajis-projects.vercel.app
+    echo Cannot reach server at https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app
     echo Please check internet connectivity
     pause
     exit /b 1
@@ -32,6 +32,6 @@ python installer.py
 
 echo.
 echo Installation complete!
-echo The client will connect to: https://browser-tracking-28tr6vyd7-winduajis-projects.vercel.app
+echo The client will connect to: https://browser-tracking-obz04i0k1-winduajis-projects.vercel.app
 echo.
 pause
