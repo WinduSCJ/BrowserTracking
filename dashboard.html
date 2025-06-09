@@ -214,6 +214,17 @@
             background: #f59e0b;
             color: #333;
         }
+
+        .connection-status.warning {
+            background: #f97316;
+            color: white;
+        }
+
+        .connection-status.error {
+            background: #dc2626;
+            color: white;
+            animation: pulse 2s infinite;
+        }
     </style>
 </head>
 <body>
@@ -289,40 +300,197 @@
         let activityData = [];
         let maxDisplayEntries = 50;
         
-        // Initialize real-time connection
+        // Initialize real-time connection with fast polling fallback
         function initRealTimeConnection() {
+            updateConnectionStatus('connecting', '🔄 Connecting...');
+
+            // Try SSE first
+            if (typeof EventSource !== 'undefined') {
+                console.log('Attempting SSE connection...');
+                trySSEConnection();
+            } else {
+                console.log('SSE not supported, using fast polling...');
+                startFastPolling();
+            }
+        }
+
+        function trySSEConnection() {
             if (eventSource) {
                 eventSource.close();
             }
 
-            updateConnectionStatus('connecting', '🔄 Connecting...');
+            connectionType = 'sse';
+            updateConnectionStatus('connecting', '🔄 Connecting SSE', 'Attempting real-time connection');
 
             eventSource = new EventSource(`${API_BASE}/api/events`);
 
+            let sseConnected = false;
+            let connectionTimeout;
+
             eventSource.onopen = function() {
-                updateConnectionStatus('connected', '⚡ Real-time Connected');
-                console.log('Real-time connection established');
+                sseConnected = true;
+                clearTimeout(connectionTimeout);
+                updateConnectionStatus('connected', '⚡ Real-time Active', 'SSE connection established');
+                console.log('SSE connection established');
             };
 
             eventSource.onmessage = function(event) {
                 try {
                     const data = JSON.parse(event.data);
                     handleRealtimeMessage(data);
+                    consecutiveErrors = 0; // Reset error count on successful message
                 } catch (error) {
-                    console.error('Error parsing real-time message:', error);
+                    console.error('Error parsing SSE message:', error);
+                    consecutiveErrors++;
                 }
             };
 
             eventSource.onerror = function(error) {
-                updateConnectionStatus('disconnected', '❌ Connection Lost');
-                console.error('Real-time connection error:', error);
+                console.error('SSE connection error:', error);
+                consecutiveErrors++;
 
-                // Retry connection after 5 seconds
-                setTimeout(() => {
-                    console.log('Retrying real-time connection...');
-                    initRealTimeConnection();
-                }, 5000);
+                if (!sseConnected) {
+                    console.log('SSE failed to connect, falling back to fast polling...');
+                    updateConnectionStatus('connecting', '🔄 SSE Failed', 'Switching to fast polling');
+                    eventSource.close();
+                    setTimeout(() => startFastPolling(), 1000);
+                } else {
+                    const details = getDetailedConnectionStatus();
+                    updateConnectionStatus('disconnected', '❌ SSE Lost', details);
+
+                    // Retry SSE after delay based on error count
+                    const retryDelay = Math.min(5000 + (consecutiveErrors * 2000), 30000);
+                    setTimeout(() => {
+                        if (isOnline) {
+                            console.log(`Retrying SSE connection... (attempt ${consecutiveErrors})`);
+                            trySSEConnection();
+                        } else {
+                            updateConnectionStatus('disconnected', '❌ No Internet', 'Check your connection');
+                        }
+                    }, retryDelay);
+                }
             };
+
+            // Timeout for SSE connection
+            connectionTimeout = setTimeout(() => {
+                if (!sseConnected) {
+                    console.log('SSE connection timeout, falling back to fast polling...');
+                    eventSource.close();
+                    updateConnectionStatus('connecting', '🔄 SSE Timeout', 'Switching to polling');
+                    setTimeout(() => startFastPolling(), 1000);
+                }
+            }, 15000);
+        }
+
+        let pollingInterval = null;
+        let lastActivityCount = 0;
+        let isPolling = false;
+        let connectionType = 'none';
+        let lastSuccessfulConnection = null;
+        let consecutiveErrors = 0;
+        let isOnline = navigator.onLine;
+
+        function startFastPolling() {
+            if (isPolling) return;
+
+            isPolling = true;
+            connectionType = 'polling';
+            updateConnectionStatus('connected', '⚡ Fast Polling Active', '3-second intervals');
+            console.log('Starting fast polling (3-second intervals)...');
+
+            // Initial load
+            loadInitialData();
+
+            // Poll every 3 seconds
+            pollingInterval = setInterval(async () => {
+                try {
+                    if (!isOnline) {
+                        updateConnectionStatus('disconnected', '❌ No Internet', 'Check your connection');
+                        return;
+                    }
+
+                    await checkForNewActivity();
+                } catch (error) {
+                    console.error('Polling error:', error);
+                    consecutiveErrors++;
+
+                    const details = getDetailedConnectionStatus();
+                    updateConnectionStatus('disconnected', '❌ Polling Failed', details);
+                }
+            }, 3000);
+        }
+
+        function stopPolling() {
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+                pollingInterval = null;
+            }
+            isPolling = false;
+        }
+
+        async function checkForNewActivity() {
+            try {
+                const response = await fetch(`${API_BASE}/api/activity?hours=1&limit=10`, {
+                    headers: {
+                        'Authorization': `Bearer ${API_TOKEN}`,
+                        'Content-Type': 'application/json'
+                    },
+                    timeout: 10000
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        // Reset error count on successful response
+                        consecutiveErrors = 0;
+
+                        const currentCount = data.activity.length;
+
+                        // Update connection status to show successful polling
+                        if (connectionType === 'polling') {
+                            updateConnectionStatus('connected', '⚡ Polling Active', `${currentCount} activities`);
+                        }
+
+                        // Check if there's new activity
+                        if (currentCount > lastActivityCount) {
+                            console.log(`New activity detected! ${currentCount} vs ${lastActivityCount}`);
+
+                            // Get the new entries (difference)
+                            const newEntries = data.activity.slice(0, currentCount - lastActivityCount);
+                            addNewActivity(newEntries);
+
+                            lastActivityCount = currentCount;
+                        } else if (lastActivityCount === 0) {
+                            // First load
+                            activityData = data.activity;
+                            displayActivity();
+                            updateStats();
+                            lastActivityCount = currentCount;
+                        }
+                    } else {
+                        throw new Error(data.error || 'API returned error');
+                    }
+                } else {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+            } catch (error) {
+                console.error('Error checking for new activity:', error);
+                consecutiveErrors++;
+
+                // Determine error type
+                let errorDetails = '';
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorDetails = 'Network error';
+                } else if (error.message.includes('401')) {
+                    errorDetails = 'Authentication failed';
+                } else if (error.message.includes('500')) {
+                    errorDetails = 'Server error';
+                } else {
+                    errorDetails = 'Connection timeout';
+                }
+
+                throw new Error(errorDetails);
+            }
         }
 
         function handleRealtimeMessage(data) {
@@ -368,10 +536,69 @@
             updateLastUpdate();
         }
 
-        function updateConnectionStatus(status, message) {
+        function updateConnectionStatus(status, message, details = '') {
             const statusElement = document.getElementById('connection-status');
             statusElement.className = `connection-status ${status}`;
-            statusElement.textContent = message;
+
+            // Add timestamp
+            const timestamp = new Date().toLocaleTimeString('id-ID');
+            let fullMessage = message;
+
+            if (details) {
+                fullMessage += ` (${details})`;
+            }
+
+            statusElement.textContent = `${fullMessage} - ${timestamp}`;
+
+            // Update last successful connection
+            if (status === 'connected') {
+                lastSuccessfulConnection = new Date();
+                consecutiveErrors = 0;
+            } else if (status === 'disconnected') {
+                consecutiveErrors++;
+            }
+
+            // Update server status indicator
+            updateServerStatusIndicator(status);
+        }
+
+        function updateServerStatusIndicator(connectionStatus) {
+            const serverStatusElement = document.getElementById('server-status');
+
+            if (!isOnline) {
+                serverStatusElement.innerHTML = '<span class="status-indicator status-offline"></span>No Internet';
+            } else if (connectionStatus === 'connected') {
+                serverStatusElement.innerHTML = '<span class="status-indicator status-online"></span>Online';
+            } else if (connectionStatus === 'connecting') {
+                serverStatusElement.innerHTML = '<span class="status-indicator status-offline"></span>Connecting...';
+            } else {
+                const timeSinceLastSuccess = lastSuccessfulConnection ?
+                    Math.round((new Date() - lastSuccessfulConnection) / 1000) : null;
+
+                if (timeSinceLastSuccess && timeSinceLastSuccess < 30) {
+                    serverStatusElement.innerHTML = '<span class="status-indicator status-offline"></span>Reconnecting...';
+                } else {
+                    serverStatusElement.innerHTML = '<span class="status-indicator status-offline"></span>Connection Issues';
+                }
+            }
+        }
+
+        function getDetailedConnectionStatus() {
+            if (!isOnline) {
+                return 'No internet connection';
+            }
+
+            if (consecutiveErrors > 5) {
+                return 'Server may be down';
+            } else if (consecutiveErrors > 2) {
+                return 'Connection unstable';
+            } else if (connectionType === 'polling') {
+                return 'Using fast polling';
+            } else if (connectionType === 'sse') {
+                return 'Real-time SSE';
+            }
+
+            return '';
         }
 
         async function checkServerStatus() {
@@ -510,13 +737,73 @@
             document.getElementById('last-update').textContent = timeStr;
         }
 
+        // Network status monitoring
+        function setupNetworkMonitoring() {
+            // Monitor online/offline status
+            window.addEventListener('online', function() {
+                console.log('Network connection restored');
+                isOnline = true;
+                updateConnectionStatus('connecting', '🔄 Reconnecting', 'Network restored');
+
+                // Restart connection after a short delay
+                setTimeout(() => {
+                    initRealTimeConnection();
+                }, 2000);
+            });
+
+            window.addEventListener('offline', function() {
+                console.log('Network connection lost');
+                isOnline = false;
+                updateConnectionStatus('disconnected', '❌ No Internet', 'Check your connection');
+
+                // Close existing connections
+                if (eventSource) {
+                    eventSource.close();
+                }
+                stopPolling();
+            });
+
+            // Periodic connectivity check
+            setInterval(async () => {
+                if (isOnline && consecutiveErrors > 3) {
+                    try {
+                        const response = await fetch(`${API_BASE}/health`, {
+                            method: 'HEAD',
+                            timeout: 5000
+                        });
+
+                        if (response.ok) {
+                            console.log('Server connectivity verified');
+                            consecutiveErrors = 0;
+                        }
+                    } catch (error) {
+                        console.log('Server connectivity check failed');
+                    }
+                }
+            }, 30000); // Check every 30 seconds
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('Dashboard initializing...');
+
+            // Setup network monitoring
+            setupNetworkMonitoring();
+
+            // Initialize connection
             initRealTimeConnection();
             updateLastUpdate();
 
             // Update last update time every second
             setInterval(updateLastUpdate, 1000);
+
+            // Cleanup on page unload
+            window.addEventListener('beforeunload', function() {
+                if (eventSource) {
+                    eventSource.close();
+                }
+                stopPolling();
+            });
         });
     </script>
 </body>
